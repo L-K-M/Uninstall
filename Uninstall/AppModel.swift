@@ -88,17 +88,35 @@ final class AppModel {
                     }
                 }
 
+                var pendingUpdates: [(Int, AppFootprint)] = []
+                var completed = 0
+                var lastFlush = ContinuousClock.now
+
+                @MainActor func flushUpdates() {
+                    guard !pendingUpdates.isEmpty else { return }
+                    for (index, footprint) in pendingUpdates {
+                        rows[index].footprint = footprint
+                    }
+                    completedScans = completed
+                    pendingUpdates.removeAll(keepingCapacity: true)
+                    lastFlush = ContinuousClock.now
+                }
+
                 for await (index, footprint) in group {
                     guard !Task.isCancelled else {
                         group.cancelAll()
                         return
                     }
-                    rows[index].footprint = footprint
-                    completedScans += 1
+                    pendingUpdates.append((index, footprint))
+                    completed += 1
                     if let (index, app) = remaining.next() {
                         group.addTask { (index, scanner.measure(app, includingContainers: includeContainers)) }
                     }
+                    if pendingUpdates.count >= 8 || ContinuousClock.now - lastFlush > .milliseconds(150) {
+                        flushUpdates()
+                    }
                 }
+                flushUpdates()
             }
 
             guard !Task.isCancelled else { return }
