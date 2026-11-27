@@ -183,7 +183,11 @@ struct AppScanner: Sendable {
 
             var info = stat()
             guard lstat(url.path, &info) == 0 else {
-                if errno == EACCES || errno == EPERM {
+                // ENOENT means the candidate simply does not exist (or lost a
+                // race with another process). Any other error is a real gap in
+                // the inventory and must be visible rather than silently
+                // treated as absent.
+                if errno != ENOENT {
                     relatedItems.append(RelatedItem(url: url, category: candidate.category,
                                                     identity: nil, usage: .unavailable))
                 }
@@ -217,11 +221,12 @@ struct AppScanner: Sendable {
     }
 
     private static func isPathComponent(_ identifier: String) -> Bool {
+        // The value becomes one path component under Library, so the only
+        // characters that can escape or break it are `/` and NUL. A wider
+        // whitelist would silently skip legitimate bundle IDs (for example
+        // those containing `_` or `+`).
         !identifier.isEmpty && identifier != "." && identifier != ".."
-            && identifier.utf8.allSatisfy { byte in
-                (65...90).contains(byte) || (97...122).contains(byte) || (48...57).contains(byte)
-                    || byte == 45 || byte == 46
-            }
+            && !identifier.contains("/") && !identifier.contains("\0")
     }
 
     private func makeApp(at url: URL, readOnly: Bool) -> InstalledApp? {

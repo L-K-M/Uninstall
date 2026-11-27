@@ -115,6 +115,33 @@ final class UninstallTests: XCTestCase {
         XCTAssertEqual(footprint.totalBytes, footprint.bundle.bytes)
     }
 
+    func testBundleIdentifiersWithExtraCharactersAreScanned() throws {
+        let customIdentifier = "dev.example.Editor_Tool"
+        try makeApp(relativePath: "Editor.app", bundleIdentifier: customIdentifier)
+        try makeFile(at: library.appendingPathComponent("Caches/\(customIdentifier)/data"))
+        let app = try XCTUnwrap(scanner.discover().first)
+        XCTAssertEqual(app.bundleIdentifier, customIdentifier)
+
+        let footprint = scanner.measure(app)
+        let cache = try XCTUnwrap(footprint.relatedItems.first { $0.category == .cache })
+        XCTAssertTrue(cache.canRemove)
+        XCTAssertTrue(footprint.isComplete)
+    }
+
+    func testUnexpectedCandidateErrorsAreVisibleInsteadOfAbsent() throws {
+        try makeApp(relativePath: "Editor.app")
+        // A regular file where the Caches directory should be makes lstat fail
+        // with ENOTDIR for every candidate underneath it.
+        try Data().write(to: library.appendingPathComponent("Caches"))
+        let app = try XCTUnwrap(scanner.discover().first)
+
+        let footprint = scanner.measure(app)
+        let item = try XCTUnwrap(footprint.relatedItems.first)
+        XCTAssertEqual(item.url.path, library.appendingPathComponent("Caches/\(identifier)").path)
+        XCTAssertFalse(item.canRemove)
+        XCTAssertFalse(footprint.isComplete)
+    }
+
     func testStaleRelatedFileAbortsBeforeTheAppIsMoved() throws {
         try makeApp(relativePath: "Editor.app")
         let preferences = library.appendingPathComponent("Preferences/\(identifier).plist")
@@ -219,9 +246,14 @@ final class UninstallTests: XCTestCase {
 
     @discardableResult
     private func makeApp(relativePath: String) throws -> URL {
+        try makeApp(relativePath: relativePath, bundleIdentifier: identifier)
+    }
+
+    @discardableResult
+    private func makeApp(relativePath: String, bundleIdentifier: String) throws -> URL {
         let app = apps.appendingPathComponent(relativePath, isDirectory: true).standardizedFileURL
         let plist = app.appendingPathComponent("Contents/Info.plist")
-        let info = ["CFBundleIdentifier": identifier, "CFBundlePackageType": "APPL"]
+        let info = ["CFBundleIdentifier": bundleIdentifier, "CFBundlePackageType": "APPL"]
         let data = try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0)
         try makeFile(at: plist, data: data)
         return app
