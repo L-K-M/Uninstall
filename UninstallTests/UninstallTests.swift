@@ -157,6 +157,22 @@ final class UninstallTests: XCTestCase {
         XCTAssertTrue(try XCTUnwrap(result.problems.first).contains("/Logs/"))
     }
 
+    func testSuccessfulRemovalUpdateClearsDuplicateFlagOnRemainingCopy() throws {
+        try makeApp(relativePath: "Editor.app")
+        try makeApp(relativePath: "Vendor/Editor.app")
+        let apps = scanner.discover()
+        XCTAssertEqual(apps.count, 2)
+        var rows = apps.map { AppRow(app: $0, hasOtherInstallations: true) }
+        let removed = try XCTUnwrap(rows.first {
+            $0.app.url.deletingLastPathComponent().lastPathComponent == "Applications"
+        }?.app)
+
+        updateRowsAfterSuccessfulRemoval(&rows, removedApp: removed)
+
+        XCTAssertEqual(rows.count, 1)
+        XCTAssertFalse(try XCTUnwrap(rows.first).hasOtherInstallations)
+    }
+
     func testPermissionDeniedRetriesTheAppWithAuthorization() throws {
         try makeApp(relativePath: "Editor.app")
         try makeFile(at: library.appendingPathComponent("Caches/\(identifier)"))
