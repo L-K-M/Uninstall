@@ -44,6 +44,13 @@ struct ContentView: View {
             Group {
                 if let row = model.selectedRow {
                     details(for: row)
+                } else if let lastReceipt = model.receipt {
+                    VStack(spacing: 0) {
+                        receiptCard(for: lastReceipt)
+                        Divider()
+                        ContentUnavailableView("Select an App", systemImage: "macwindow",
+                                               description: Text("Review another app’s storage and choose what to remove."))
+                    }
                 } else {
                     ContentUnavailableView("Select an App", systemImage: "macwindow",
                                            description: Text("Review its storage and choose what to remove."))
@@ -191,6 +198,10 @@ struct ContentView: View {
 
     private func details(for row: AppRow) -> some View {
         VStack(spacing: 0) {
+            if let lastReceipt = model.receipt {
+                receiptCard(for: lastReceipt)
+                Divider()
+            }
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     HStack(alignment: .center, spacing: 12) {
@@ -218,6 +229,48 @@ struct ContentView: View {
             controls(for: row)
                 .padding(14)
         }
+    }
+
+    /// What the last removal did, with a way to look at the result. Partial
+    /// failures come first and read as a warning, not a celebration.
+    private func receiptCard(for receipt: RemovalReceipt) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: receipt.problems.isEmpty ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                .font(.title3)
+                .foregroundStyle(receipt.problems.isEmpty ? Color.accentColor : Color.orange)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(receipt.summary)
+                    .font(.callout.weight(.medium))
+                Text("Files go to the Trash, where you can restore them. "
+                    + "Empty the Trash to reclaim the space.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if !receipt.problems.isEmpty {
+                    ForEach(receipt.problems, id: \.self) { problem in
+                        Text(problem)
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                            .textSelection(.enabled)
+                    }
+                }
+                HStack(spacing: 8) {
+                    Button("Open Trash") { model.openTrash() }
+                        .controlSize(.small)
+                    Button("Reveal in Finder") { model.reveal(receipt.appURL) }
+                        .controlSize(.small)
+                    Spacer(minLength: 0)
+                    Button("Dismiss") { model.receipt = nil }
+                        .controlSize(.small)
+                        .buttonStyle(.borderless)
+                }
+                .padding(.top, 3)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(receipt.problems.isEmpty ? Color.accentColor.opacity(0.08) : Color.orange.opacity(0.1))
     }
 
     private func storage(for footprint: AppFootprint) -> some View {
@@ -341,6 +394,7 @@ struct ContentView: View {
 
     private func scan(includingContainers: Bool) {
         checkedByApp = [:]
+        model.clearReceipt()
         model.refresh(includingContainers: includingContainers)
     }
 
@@ -382,14 +436,21 @@ private struct RemovalReview: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Move \(plan.app.name) to Trash?").font(.title2.weight(.semibold))
-            Text("The items below will move to the Trash.")
+            HStack(alignment: .top, spacing: 12) {
+                AppIcon(url: plan.app.url, size: 44)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Move \(plan.app.name) to Trash?").font(.title2.weight(.semibold))
+                    Text("\(itemCountLabel(plan.relatedItems.count + 1)) · \(reviewedTotal(plan))")
+                        .font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                }
+            }
+            Text("The items below will move to the Trash. Caches and logs are selected by default.")
                 .foregroundStyle(.secondary)
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
-                    reviewedItem(plan.app.name, url: plan.app.url)
+                    reviewedItem(plan.app.name, url: plan.app.url, usage: plan.bundleUsage)
                     ForEach(plan.relatedItems) { item in
-                        reviewedItem(item.category.rawValue, url: item.url)
+                        reviewedItem(item.category.rawValue, url: item.url, usage: item.usage)
                         if let note = item.category.note {
                             Text(note).font(.caption).foregroundStyle(.secondary)
                         }
@@ -404,6 +465,7 @@ private struct RemovalReview: View {
                 Spacer()
                 Button("Cancel", action: cancel).keyboardShortcut(.cancelAction)
                 Button("Move to Trash", role: .destructive, action: confirm)
+                    .keyboardShortcut(.defaultAction)
             }
         }
         .padding(22)
@@ -411,12 +473,30 @@ private struct RemovalReview: View {
         .fixedSize(horizontal: false, vertical: true)
     }
 
-    private func reviewedItem(_ name: String, url: URL) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(name).fontWeight(.medium)
-            Text(displayedPath(url))
-                .font(.caption).foregroundStyle(.secondary)
-                .textSelection(.enabled)
+    private func itemCountLabel(_ count: Int) -> String {
+        count == 1 ? "1 item" : "\(count) items"
+    }
+
+    private func reviewedTotal(_ plan: RemovalPlan) -> String {
+        var bytes = plan.bundleUsage.bytes
+        var complete = plan.bundleUsage.isComplete
+        for item in plan.relatedItems {
+            bytes += item.usage.bytes
+            complete = complete && item.usage.isComplete
+        }
+        return diskSize(DiskUsage(bytes: bytes, isComplete: complete))
+    }
+
+    private func reviewedItem(_ name: String, url: URL, usage: DiskUsage) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(name).fontWeight(.medium)
+                Text(displayedPath(url))
+                    .font(.caption).foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+            Spacer(minLength: 8)
+            Text(diskSize(usage)).font(.caption).monospacedDigit()
         }
     }
 }

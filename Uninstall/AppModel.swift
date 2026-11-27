@@ -23,6 +23,25 @@ struct RemovalNotice: Identifiable {
     let message: String
 }
 
+/// What the last removal actually did, so the app can close the loop.
+struct RemovalReceipt: Identifiable, Sendable {
+    let id = UUID()
+    let appName: String
+    let appURL: URL
+    let relatedCount: Int
+    let problems: [String]
+
+    var itemCount: Int { relatedCount + 1 }
+
+    var summary: String {
+        switch relatedCount {
+        case 0: "Moved \(appName) to the Trash."
+        case 1: "Moved \(appName) and 1 related item to the Trash."
+        default: "Moved \(appName) and \(relatedCount) related items to the Trash."
+        }
+    }
+}
+
 @MainActor @Observable
 final class AppModel {
     private(set) var rows: [AppRow] = []
@@ -34,6 +53,7 @@ final class AppModel {
     var selection: String?
     var pendingPlan: RemovalPlan?
     var notice: RemovalNotice?
+    var receipt: RemovalReceipt?
 
     @ObservationIgnored private let scanner = AppScanner.standard
     @ObservationIgnored private var scanTask: Task<Void, Never>?
@@ -47,6 +67,13 @@ final class AppModel {
         guard !didStart else { return }
         didStart = true
         refresh()
+    }
+
+    /// Drops the last removal's receipt. Called when the user starts something new;
+    /// a refresh triggered *by* a removal must keep it, or the receipt would be wiped
+    /// the instant it appeared.
+    func clearReceipt() {
+        receipt = nil
     }
 
     func refresh(includingContainers: Bool? = nil) {
@@ -144,10 +171,12 @@ final class AppModel {
 
     func prepareRemoval(for row: AppRow, relatedIDs: Set<String>) {
         guard !row.app.isProtected, removingName == nil, !isRunning(row.app) else { return }
+        receipt = nil
         let related = row.hasOtherInstallations ? [] : (row.footprint?.relatedItems ?? []).filter {
             relatedIDs.contains($0.id) && $0.canRemove
         }
-        pendingPlan = RemovalPlan(app: row.app, relatedItems: related)
+        pendingPlan = RemovalPlan(app: row.app, relatedItems: related,
+                                bundleUsage: row.footprint?.bundle ?? .unavailable)
     }
 
     func confirmRemoval(_ plan: RemovalPlan) {
@@ -181,22 +210,39 @@ final class AppModel {
             }
             removingName = nil
             if let result {
+                let movedRelated = max(0, result.moved.count - 1)
                 if !result.problems.isEmpty {
                     let title = result.moved.isEmpty ? "Couldn’t move \(app.name) to Trash" : "Some files couldn’t be moved"
                     notice = RemovalNotice(title: title, message: result.problems.joined(separator: "\n\n"))
                 }
                 if !result.moved.isEmpty {
-                    let count = result.moved.count - 1
-                    status = switch count {
-                    case 0: "Moved \(app.name) to Trash."
-                    case 1: "Moved \(app.name) and 1 related item to Trash."
-                    default: "Moved \(app.name) and \(count) related items to Trash."
-                    }
+                    status = nil
+                    receipt = RemovalReceipt(appName: app.name, appURL: app.url,
+                                              relatedCount: movedRelated, problems: result.problems)
                 } else if result.wasCancelled {
                     status = "Removal canceled."
                 }
             }
             refresh()
+        }
+    }
+
+    /// Reveals a file in Finder without opening it.
+    func reveal(_ url: URL) {
+        NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+
+    /// Opens the user's Trash so they can see what was moved and restore it.
+    func openTrash() {
+        guard let trash = try? FileManager.default.url(for: .trashDirectory, in: .userDomainMask,
+                                                       appropriateFor: nil, create: false)
+        else {
+            notice = RemovalNotice(title: "Couldn’t open the Trash",
+                                   message: "Open the Trash in the Dock instead.")
+            return
+        }
+        if !NSWorkspace.shared.open(trash) {
+            notice = RemovalNotice(title: "Couldn’t open the Trash", message: trash.path)
         }
     }
 

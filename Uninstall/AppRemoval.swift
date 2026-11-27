@@ -4,6 +4,8 @@ struct RemovalPlan: Identifiable, Sendable {
     let id = UUID()
     let app: InstalledApp
     let relatedItems: [RelatedItem]
+    /// The app bundle's measured size, so the confirmation can show a total.
+    let bundleUsage: DiskUsage
 }
 
 struct RemovalResult: Sendable {
