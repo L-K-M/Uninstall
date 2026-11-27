@@ -18,16 +18,14 @@ private func displayedPath(_ url: URL) -> String {
 struct ContentView: View {
     @State private var model = AppModel()
     @State private var search = ""
-    @State private var sortOrder = [KeyPathComparator(\AppRow.totalSortValue, order: .reverse)]
     @State private var checkedByApp: [String: Set<String>] = [:]
 
     private var visibleRows: [AppRow] {
         let term = search.trimmingCharacters(in: .whitespacesAndNewlines)
-        return model.rows.filter {
+        return model.orderedRows.filter {
             term.isEmpty || $0.name.localizedStandardContains(term)
                 || $0.app.bundleIdentifier?.localizedStandardContains(term) == true
         }
-        .sorted(by: compare)
     }
 
     var body: some View {
@@ -66,11 +64,11 @@ struct ContentView: View {
 
             ToolbarItem(placement: .automatic) {
                 Menu {
-                    Button("Largest First") { sortOrder = [KeyPathComparator(\AppRow.totalSortValue, order: .reverse)] }
-                    Button("Smallest First") { sortOrder = [KeyPathComparator(\AppRow.totalSortValue)] }
-                    Button("Recently Opened") { sortOrder = [KeyPathComparator(\AppRow.lastOpenedSortValue, order: .reverse)] }
-                    Button("Least Recently Opened") { sortOrder = [KeyPathComparator(\AppRow.lastOpenedSortValue)] }
-                    Button("Name") { sortOrder = [KeyPathComparator(\AppRow.name)] }
+                    Button("Largest First") { model.applySortOrder([KeyPathComparator(\AppRow.totalSortValue, order: .reverse)]) }
+                    Button("Smallest First") { model.applySortOrder([KeyPathComparator(\AppRow.totalSortValue)]) }
+                    Button("Recently Opened") { model.applySortOrder([KeyPathComparator(\AppRow.lastOpenedSortValue, order: .reverse)]) }
+                    Button("Least Recently Opened") { model.applySortOrder([KeyPathComparator(\AppRow.lastOpenedSortValue)]) }
+                    Button("Name") { model.applySortOrder([KeyPathComparator(\AppRow.name)]) }
                 } label: {
                     Label("Sort Apps", systemImage: "arrow.up.arrow.down")
                 }
@@ -113,7 +111,7 @@ struct ContentView: View {
         @Bindable var model = model
         let rows = visibleRows
 
-        return Table(rows, selection: $model.selection, sortOrder: $sortOrder) {
+        return Table(rows, selection: $model.selection, sortOrder: $model.sortOrder) {
             TableColumn("App", value: \.name) { row in
                 HStack(spacing: 8) {
                     AppIcon(url: row.app.url, size: 24)
@@ -344,21 +342,24 @@ struct ContentView: View {
         model.refresh(includingContainers: includingContainers)
     }
 
-    private func compare(_ left: AppRow, _ right: AppRow) -> Bool {
-        for comparator in sortOrder {
-            if comparator.keyPath == \AppRow.lastOpenedSortValue,
-               (left.lastOpened == nil) != (right.lastOpened == nil) {
-                return left.lastOpened != nil
-            }
-            if comparator.keyPath == \AppRow.totalSortValue,
-               (left.footprint == nil) != (right.footprint == nil) {
-                return left.footprint != nil
-            }
-            let order = comparator.compare(left, right)
-            if order != .orderedSame { return order == .orderedAscending }
-        }
-        let nameOrder = left.name.localizedStandardCompare(right.name)
-        return nameOrder == .orderedSame ? left.id < right.id : nameOrder == .orderedAscending
+}
+
+/// NSWorkspace icon lookups are expensive enough to cause scroll stutter, so keep them cached.
+private enum AppIconCache {
+    /// Only touched from the main actor, where `AppIcon` is rendered.
+    private static nonisolated(unsafe) let cache: NSCache<NSString, NSImage> = {
+        let cache = NSCache<NSString, NSImage>()
+        cache.countLimit = 512
+        return cache
+    }()
+
+    @MainActor
+    static func image(for url: URL) -> NSImage {
+        let key = url.path as NSString
+        if let cached = cache.object(forKey: key) { return cached }
+        let image = NSWorkspace.shared.icon(forFile: url.path)
+        cache.setObject(image, forKey: key)
+        return image
     }
 }
 
@@ -367,7 +368,7 @@ private struct AppIcon: View {
     let size: CGFloat
 
     var body: some View {
-        Image(nsImage: NSWorkspace.shared.icon(forFile: url.path))
+        Image(nsImage: AppIconCache.image(for: url))
             .resizable()
             .aspectRatio(contentMode: .fit)
             .frame(width: size, height: size)

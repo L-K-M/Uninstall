@@ -217,6 +217,63 @@ final class UninstallTests: XCTestCase {
         XCTAssertFalse(result.wasCancelled)
     }
 
+    @MainActor
+    func testOrderedRowsKeepPreScanOrderUntilTheScanFinishes() {
+        let model = AppModel()
+        let small = makeRow(name: "Small", bytes: 100, identifier: "dev.example.small")
+        let large = makeRow(name: "Large", bytes: 900, identifier: "dev.example.large")
+        model.rows = [small, large]
+        model.sortOrder = [KeyPathComparator(\AppRow.totalSortValue, order: .reverse)]
+        XCTAssertEqual(model.orderedRows.map(\.name), ["Large", "Small"])
+
+        // A rescan freezes the displayed order; new measurements must not move rows.
+        model.beginScanOrdering()
+        model.rows = [large, small]
+        XCTAssertEqual(model.orderedRows.map(\.name), ["Large", "Small"])
+        model.finishScanOrdering()
+        XCTAssertEqual(model.orderedRows.map(\.name), ["Large", "Small"])
+
+        // The first scan starts with no previous order, so rows keep discovery order.
+        let fresh = AppModel()
+        fresh.rows = []
+        fresh.beginScanOrdering()
+        fresh.rows = [small, large]
+        XCTAssertEqual(fresh.orderedRows.map(\.name), ["Small", "Large"])
+        fresh.finishScanOrdering()
+        XCTAssertEqual(fresh.orderedRows.map(\.name), ["Large", "Small"])
+    }
+
+    @MainActor
+    func testRemoveRowsUpdatesDuplicateFlagsAndSelection() throws {
+        let model = AppModel()
+        let first = makeRow(name: "First", bytes: 10, identifier: "dev.example.dup")
+        let second = makeRow(name: "Second", bytes: 20, identifier: "dev.example.dup")
+        model.rows = [first, second]
+        model.selection = first.id
+
+        model.removeRows(withIDs: [first.id])
+        XCTAssertNil(model.selection)
+        XCTAssertEqual(model.rows.count, 1)
+        XCTAssertFalse(try XCTUnwrap(model.rows.first).hasOtherInstallations)
+    }
+
+    private func makeRow(name: String, bytes: Int64, identifier: String) -> AppRow {
+        let url = URL(fileURLWithPath: "/tmp/\(name).app", isDirectory: true)
+        let app = InstalledApp(id: url.path, url: url, name: name, bundleIdentifier: identifier,
+                               identity: makeIdentity(),
+                               lastOpened: nil, isProtected: false, vendorUninstaller: nil)
+        return AppRow(app: app,
+                      footprint: AppFootprint(bundle: DiskUsage(bytes: bytes, isComplete: true),
+                                              relatedItems: [], relatedInventoryComplete: true))
+    }
+
+    private func makeIdentity() -> FileIdentity {
+        var info = stat()
+        info.st_dev = 1
+        info.st_ino = 1
+        return FileIdentity(info)
+    }
+
     @discardableResult
     private func makeApp(relativePath: String) throws -> URL {
         let app = apps.appendingPathComponent(relativePath, isDirectory: true).standardizedFileURL
