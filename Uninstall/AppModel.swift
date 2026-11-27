@@ -1,20 +1,60 @@
 import AppKit
+import Foundation
 import Observation
 
-struct AppRow: Identifiable {
-    var id: String { app.id }
+/// Caches the bundle icons the table renders.
+///
+/// `NSWorkspace.icon(forFile:)` is synchronous and is called once per cell render, so
+/// without a cache every observable change to the scan re-resolves the icon of every
+/// visible row.
+@MainActor
+enum IconCache {
+    private static let storage = NSCache<NSURL, NSImage>()
+
+    static func icon(for url: URL) -> NSImage {
+        let key = url as NSURL
+        if let cached = storage.object(forKey: key) { return cached }
+        let icon = NSWorkspace.shared.icon(forFile: url.path)
+        storage.setObject(icon, forKey: key)
+        return icon
+    }
+
+    static func clear() {
+        storage.removeAllObjects()
+    }
+}
+
+/// A row the table renders.
+///
+/// This is a class rather than a struct so that completing one app's measurement
+/// invalidates only that row. With a struct inside `AppModel.rows`, writing
+/// `rows[index].footprint` mutates the whole array, and SwiftUI rebuilds every cell —
+/// including re-resolving every app icon — for each of the ~30 measurements in a scan.
+@Observable
+final class AppRow: Identifiable {
+    let id: String
+    let app: InstalledApp
+
+    var observedLaunch: Date?
+    var footprint: AppFootprint?
+    var hasOtherInstallations = false
+
+    init(app: InstalledApp, observedLaunch: Date?, hasOtherInstallations: Bool) {
+        self.id = app.id
+        self.app = app
+        self.observedLaunch = observedLaunch
+        self.hasOtherInstallations = hasOtherInstallations
+    }
+
     var name: String { app.name }
+
     var lastOpened: Date? {
         guard let observedLaunch else { return app.lastOpened }
         return max(observedLaunch, app.lastOpened ?? .distantPast)
     }
+
     var lastOpenedSortValue: Date { lastOpened ?? .distantPast }
     var totalSortValue: Int64 { footprint?.totalBytes ?? 0 }
-
-    let app: InstalledApp
-    var observedLaunch: Date?
-    var footprint: AppFootprint?
-    var hasOtherInstallations = false
 }
 
 struct RemovalNotice: Identifiable {
@@ -55,9 +95,11 @@ final class AppModel {
         scanTask?.cancel()
         isScanning = true
         completedScans = 0
+        status = nil
         refreshRunningApps()
         let scanner = scanner
         let includeContainers = includeContainers
+        let selectedID = selection
 
         scanTask = Task {
             let apps = await withTaskGroup(of: [InstalledApp].self) { group in
@@ -80,12 +122,35 @@ final class AppModel {
                 selection = nil
             }
 
+            // Measure the app the user is looking at first, then the rest in discovery
+            // order. Discovery order alone can leave a selected app waiting behind
+            // dozens of large bundles.
+            let order = apps.indices.sorted { lhs, rhs in
+                let lhsPriority = apps[lhs].id == selectedID ? 0 : 1
+                let rhsPriority = apps[rhs].id == selectedID ? 0 : 1
+                return lhsPriority == rhsPriority ? lhs < rhs : lhsPriority < rhsPriority
+            }
+            var cursor = order.makeIterator()
+
             await withTaskGroup(of: (Int, AppFootprint).self) { group in
-                var remaining = apps.enumerated().makeIterator()
                 for _ in 0..<min(3, apps.count) {
-                    if let (index, app) = remaining.next() {
+                    if let index = cursor.next() {
+                        let app = apps[index]
                         group.addTask { (index, scanner.measure(app, includingContainers: includeContainers)) }
                     }
+                }
+
+                // Coalesce completions. A scan of ~90 apps produces ~30 results, and
+                // writing each one straight through invalidates the table that often.
+                var pending: [(Int, AppFootprint)] = []
+                var lastFlush = ContinuousClock.now
+                let flush: () -> Void = { [self] in
+                    guard !pending.isEmpty else { return }
+                    for (index, footprint) in pending {
+                        self.rows[index].footprint = footprint
+                    }
+                    pending.removeAll(keepingCapacity: true)
+                    lastFlush = ContinuousClock.now
                 }
 
                 for await (index, footprint) in group {
@@ -93,12 +158,17 @@ final class AppModel {
                         group.cancelAll()
                         return
                     }
-                    rows[index].footprint = footprint
+                    pending.append((index, footprint))
                     completedScans += 1
-                    if let (index, app) = remaining.next() {
+                    if ContinuousClock.now - lastFlush >= .milliseconds(50) {
+                        flush()
+                    }
+                    if let index = cursor.next() {
+                        let app = apps[index]
                         group.addTask { (index, scanner.measure(app, includingContainers: includeContainers)) }
                     }
                 }
+                flush()
             }
 
             guard !Task.isCancelled else { return }
@@ -123,10 +193,10 @@ final class AppModel {
         guard didChange else { return }
 
         UserDefaults.standard.set(observedLaunches, forKey: "observedLaunches")
-        for index in rows.indices {
-            let date = observedLaunch(for: rows[index].app)
-            if rows[index].observedLaunch != date {
-                rows[index].observedLaunch = date
+        for row in rows {
+            let date = observedLaunch(for: row.app)
+            if row.observedLaunch != date {
+                row.observedLaunch = date
             }
         }
     }
