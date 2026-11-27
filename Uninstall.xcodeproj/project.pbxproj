@@ -197,7 +197,7 @@
 					"@executable_path/../Frameworks",
 					"@loader_path/../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = dev.uninstall.mac.tests;
+				PRODUCT_BUNDLE_IDENTIFIER = ch.lkmc.Uninstall.tests;
 				SDKROOT = macosx;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Uninstall.app/Contents/MacOS/Uninstall";
 			};
@@ -219,7 +219,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = dev.uninstall.mac;
+				PRODUCT_BUNDLE_IDENTIFIER = ch.lkmc.Uninstall;
 				SDKROOT = macosx;
 			};
 			name = Release;
@@ -240,7 +240,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = dev.uninstall.mac;
+				PRODUCT_BUNDLE_IDENTIFIER = ch.lkmc.Uninstall;
 				SDKROOT = macosx;
 			};
 			name = Debug;
@@ -321,7 +321,7 @@
 					"@executable_path/../Frameworks",
 					"@loader_path/../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = dev.uninstall.mac.tests;
+				PRODUCT_BUNDLE_IDENTIFIER = ch.lkmc.Uninstall.tests;
 				SDKROOT = macosx;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Uninstall.app/Contents/MacOS/Uninstall";
 			};

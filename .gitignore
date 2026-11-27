@@ -1,3 +1,8 @@
 .DS_Store
 xcuserdata/
 DerivedData/
+build/
+dist/
+.idea/
+.vscode/
+local.properties
