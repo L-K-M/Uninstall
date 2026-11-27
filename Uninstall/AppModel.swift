@@ -23,6 +23,26 @@ struct RemovalNotice: Identifiable {
     let message: String
 }
 
+enum AppFilter: String, CaseIterable, Sendable, Identifiable {
+    case all
+    case removable
+    case relatedFiles
+    case running
+    case protectedApps
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .all: "All Apps"
+        case .removable: "Removable"
+        case .relatedFiles: "Has Related Files"
+        case .running: "Running"
+        case .protectedApps: "Protected"
+        }
+    }
+}
+
 @MainActor @Observable
 final class AppModel {
     private(set) var rows: [AppRow] = []
@@ -133,6 +153,21 @@ final class AppModel {
 
     func isRunning(_ app: InstalledApp) -> Bool {
         runningPaths.contains(app.id)
+    }
+
+    nonisolated static func row(_ row: AppRow, matches filter: AppFilter, isRunning: Bool) -> Bool {
+        switch filter {
+        case .all:
+            return true
+        case .removable:
+            return !row.app.isProtected
+        case .relatedFiles:
+            return !row.app.isProtected && row.footprint?.relatedItems.isEmpty == false
+        case .running:
+            return isRunning
+        case .protectedApps:
+            return row.app.isProtected
+        }
     }
 
     private func observedLaunch(for app: InstalledApp) -> Date? {
