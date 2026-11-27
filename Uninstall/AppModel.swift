@@ -147,7 +147,7 @@ final class AppModel {
         let related = row.hasOtherInstallations ? [] : (row.footprint?.relatedItems ?? []).filter {
             relatedIDs.contains($0.id) && $0.canRemove
         }
-        pendingPlan = RemovalPlan(app: row.app, relatedItems: related)
+        pendingPlan = RemovalPlan(app: row.app, relatedItems: related, bundleUsage: row.footprint?.bundle)
     }
 
     func confirmRemoval(_ plan: RemovalPlan) {

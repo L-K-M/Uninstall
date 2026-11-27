@@ -387,9 +387,9 @@ private struct RemovalReview: View {
                 .foregroundStyle(.secondary)
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
-                    reviewedItem(plan.app.name, url: plan.app.url)
+                    reviewedItem(plan.app.name, url: plan.app.url, usage: plan.bundleUsage)
                     ForEach(plan.relatedItems) { item in
-                        reviewedItem(item.category.rawValue, url: item.url)
+                        reviewedItem(item.category.rawValue, url: item.url, usage: item.usage)
                         if let note = item.category.note {
                             Text(note).font(.caption).foregroundStyle(.secondary)
                         }
@@ -399,6 +399,18 @@ private struct RemovalReview: View {
             }
             .frame(minHeight: 58, idealHeight: min(220, CGFloat(plan.relatedItems.count + 1) * 52),
                    maxHeight: 240)
+
+            HStack {
+                Text("Total selected")
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if let usage = plan.selectedUsage {
+                    Text(diskSize(usage)).monospacedDigit()
+                } else {
+                    Text("Not measured").foregroundStyle(.secondary)
+                }
+            }
+            .font(.callout)
 
             HStack {
                 Spacer()
@@ -411,12 +423,20 @@ private struct RemovalReview: View {
         .fixedSize(horizontal: false, vertical: true)
     }
 
-    private func reviewedItem(_ name: String, url: URL) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(name).fontWeight(.medium)
-            Text(displayedPath(url))
-                .font(.caption).foregroundStyle(.secondary)
-                .textSelection(.enabled)
+    private func reviewedItem(_ name: String, url: URL, usage: DiskUsage?) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(name).fontWeight(.medium)
+                Text(displayedPath(url))
+                    .font(.caption).foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            if let usage {
+                Text(diskSize(usage))
+                    .font(.caption).monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 }
