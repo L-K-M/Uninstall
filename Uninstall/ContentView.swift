@@ -176,6 +176,13 @@ struct ContentView: View {
                 Image(systemName: "checkmark.circle")
                     .accessibilityHidden(true)
                 Text(status)
+                Button { model.showTrash() } label: {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.borderless)
+                .controlSize(.small)
+                .help("Reveal the Trash in Finder")
+                .accessibilityLabel("Show in Trash")
             } else {
                 Text("\(visibleRows.count) \(visibleRows.count == 1 ? "app" : "apps")")
             }

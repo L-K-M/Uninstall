@@ -206,4 +206,10 @@ final class AppModel {
             notice = RemovalNotice(title: "Couldn’t open the uninstaller", message: url.path)
         }
     }
+
+    func showTrash() {
+        guard let trash = try? FileManager.default.url(for: .trashDirectory, in: .userDomainMask,
+                                                       appropriateFor: nil, create: false) else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([trash])
+    }
 }
