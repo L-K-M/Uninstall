@@ -120,6 +120,14 @@ struct ContentView: View {
                     Text(row.name).lineLimit(1)
                 }
                 .padding(.vertical, 2)
+                .contextMenu {
+                    Button("Open") { model.open(row.app) }
+                    Button("Reveal in Finder") { model.reveal(row.app) }
+                    Button("Copy Path") { model.copyPath(row.app) }
+                    if model.isRunning(row.app) {
+                        Button("Quit") { model.quit(row.app) }
+                    }
+                }
             }
             .width(min: 160, ideal: 245)
 
