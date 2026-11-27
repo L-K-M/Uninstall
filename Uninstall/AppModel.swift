@@ -206,4 +206,41 @@ final class AppModel {
             notice = RemovalNotice(title: "Couldn’t open the uninstaller", message: url.path)
         }
     }
+
+    func open(_ app: InstalledApp) {
+        if !NSWorkspace.shared.open(app.url) {
+            notice = RemovalNotice(title: "Couldn’t open \(app.name)", message: app.url.path)
+        }
+    }
+
+    func reveal(_ app: InstalledApp) {
+        NSWorkspace.shared.activateFileViewerSelecting([app.url])
+    }
+
+    func copyPath(_ app: InstalledApp) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(app.url.path, forType: .string)
+    }
+
+    func quit(_ app: InstalledApp) {
+        let matches = NSWorkspace.shared.runningApplications.filter {
+            $0.bundleURL?.resolvingSymlinksInPath().path == app.id
+        }
+        guard !matches.isEmpty else {
+            refreshRunningApps()
+            return
+        }
+        matches.forEach { $0.terminate() }
+        Task {
+            for _ in 0..<16 {
+                try? await Task.sleep(for: .milliseconds(250))
+                refreshRunningApps()
+                if !isRunning(app) { break }
+            }
+            if isRunning(app) {
+                notice = RemovalNotice(title: "Couldn’t quit \(app.name)",
+                                       message: "\(app.name) is still running. Quit it manually, then try again.")
+            }
+        }
+    }
 }
