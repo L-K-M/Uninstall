@@ -17,6 +17,35 @@ struct AppRow: Identifiable {
     var hasOtherInstallations = false
 }
 
+/// A short relative age for the Last Opened column, falling back to an absolute
+/// date once the app has not been opened in over a week.
+func lastOpenedLabel(_ date: Date, now: Date = Date()) -> String {
+    let seconds = now.timeIntervalSince(date)
+    switch seconds {
+    case ..<0: return date.formatted(date: .abbreviated, time: .omitted)
+    case ..<60: return "Just now"
+    case ..<3_600: return countLabel(Int(seconds / 60), "min")
+    case ..<86_400: return countLabel(Int(seconds / 3_600), "hr")
+    case ..<604_800: return countLabel(Int(seconds / 86_400), "day")
+    default: return date.formatted(date: .abbreviated, time: .omitted)
+    }
+}
+
+private func countLabel(_ count: Int, _ unit: String) -> String {
+    "\(count) \(unit)\(count == 1 ? "" : "s") ago"
+}
+
+/// Whether an app matches a search term. Matches the display name, the bundle
+/// identifier and the install path, so "utili" finds everything under
+/// /Applications/Utilities.
+func appMatchesSearchTerm(_ app: InstalledApp, _ term: String) -> Bool {
+    let trimmed = term.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return true }
+    return app.name.localizedStandardContains(trimmed)
+        || app.bundleIdentifier?.localizedStandardContains(trimmed) == true
+        || app.url.path.localizedStandardContains(trimmed)
+}
+
 struct RemovalNotice: Identifiable {
     let id = UUID()
     let title: String

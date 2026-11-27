@@ -10,24 +10,6 @@ private func diskSize(_ usage: DiskUsage) -> String {
     return usage.bytes > 0 ? "≥ " + diskSize(usage.bytes) : "Unavailable"
 }
 
-/// A short relative age for the Last Opened column, falling back to an absolute
-/// date once the app has not been opened in over a week.
-private func lastOpenedLabel(_ date: Date, now: Date = Date()) -> String {
-    let seconds = now.timeIntervalSince(date)
-    switch seconds {
-    case ..<0: return date.formatted(date: .abbreviated, time: .omitted)
-    case ..<60: return "Just now"
-    case ..<3_600: return countLabel(Int(seconds / 60), "min")
-    case ..<86_400: return countLabel(Int(seconds / 3_600), "hr")
-    case ..<604_800: return countLabel(Int(seconds / 86_400), "day")
-    default: return date.formatted(date: .abbreviated, time: .omitted)
-    }
-}
-
-private func countLabel(_ count: Int, _ unit: String) -> String {
-    "\(count) \(unit)\(count == 1 ? "" : "s") ago"
-}
-
 private func displayedPath(_ url: URL) -> String {
     let home = FileManager.default.homeDirectoryForCurrentUser.path
     return url.path.hasPrefix(home + "/") ? "~" + url.path.dropFirst(home.count) : url.path
@@ -42,11 +24,7 @@ struct ContentView: View {
 
     private var visibleRows: [AppRow] {
         let term = search.trimmingCharacters(in: .whitespacesAndNewlines)
-        return model.rows.filter {
-            term.isEmpty || $0.name.localizedStandardContains(term)
-                || $0.app.bundleIdentifier?.localizedStandardContains(term) == true
-                || $0.app.url.path.localizedStandardContains(term)
-        }
+        return model.rows.filter { appMatchesSearchTerm($0.app, search) }
         .sorted(by: compare)
     }
 
@@ -407,6 +385,11 @@ struct ContentView: View {
     }
 
     private func scan(includingContainers: Bool) {
+        // Mirror the model's own guard. The menu-bar commands and their key
+        // equivalents have no disabled state, so ⌘R can arrive while the review
+        // sheet is open or a removal is in flight; refreshing would refuse it and
+        // the checkbox curation below would be lost for nothing.
+        guard model.removingName == nil, model.pendingPlan == nil else { return }
         checkedByApp = [:]
         model.refresh(includingContainers: includingContainers)
     }
