@@ -172,6 +172,8 @@ struct ContentView: View {
                         .frame(width: 64)
                     Text("Measuring \(model.completedScans) of \(model.rows.count) apps…")
                 }
+            } else if !model.incompleteLocations.isEmpty {
+                Label("Some app locations couldn’t be scanned.", systemImage: "exclamationmark.triangle")
             } else if let status = model.status {
                 Image(systemName: "checkmark.circle")
                     .accessibilityHidden(true)
@@ -254,6 +256,13 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 10) {
             Divider()
             Text("Related Files").font(.headline)
+            if !model.incompleteLocations.isEmpty {
+                Text("Some app locations couldn’t be scanned. Related file removal is unavailable because another copy may share them.")
+                    .font(.caption).foregroundStyle(.secondary)
+                ForEach(model.incompleteLocations, id: \.self) { url in
+                    Text(displayedPath(url)).font(.caption).textSelection(.enabled)
+                }
+            }
             if row.hasOtherInstallations {
                 Text("Another installed copy uses the same bundle ID. Its related files are shared.")
                     .font(.caption).foregroundStyle(.secondary)
@@ -268,7 +277,7 @@ struct ContentView: View {
                     HStack {
                         Toggle(item.category.rawValue, isOn: binding(for: item, in: row))
                             .toggleStyle(.checkbox)
-                            .disabled(!item.canRemove || row.hasOtherInstallations || row.app.isProtected
+                            .disabled(!item.canRemove || row.hasOtherInstallations || !model.incompleteLocations.isEmpty || row.app.isProtected
                                       || model.removingName != nil)
                         Spacer()
                         Text(item.needsContainerScan ? "Scan needed" : diskSize(item.usage)).monospacedDigit()
@@ -310,7 +319,7 @@ struct ContentView: View {
                     Button("Remove App Only") { model.prepareRemoval(for: row, relatedIDs: []) }
                         .disabled(disabled)
                     Button("Remove App and Selected Files") { model.prepareRemoval(for: row, relatedIDs: selected) }
-                        .disabled(disabled || selected.isEmpty || row.hasOtherInstallations)
+                        .disabled(disabled || selected.isEmpty || row.hasOtherInstallations || !model.incompleteLocations.isEmpty)
                 } label: {
                     Label("Remove…", systemImage: "trash")
                 }
@@ -327,7 +336,7 @@ struct ContentView: View {
 
     private func binding(for item: RelatedItem, in row: AppRow) -> Binding<Bool> {
         Binding {
-            !row.hasOtherInstallations && !row.app.isProtected && checkedFiles(for: row).contains(item.id)
+            !row.hasOtherInstallations && model.incompleteLocations.isEmpty && !row.app.isProtected && checkedFiles(for: row).contains(item.id)
         } set: { checked in
             var items = checkedFiles(for: row)
             if checked {

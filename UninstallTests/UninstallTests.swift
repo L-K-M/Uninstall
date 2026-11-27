@@ -32,6 +32,17 @@ final class UninstallTests: XCTestCase {
         XCTAssertEqual(installed.first?.bundleIdentifier, identifier)
     }
 
+    func testDiscoveryReportsInvalidRootButAllowsMissingOptionalRoot() throws {
+        try makeApp(relativePath: "Editor.app")
+        let invalid = root.appendingPathComponent("not-a-directory")
+        try makeFile(at: invalid)
+        let missing = root.appendingPathComponent("missing")
+        let discovery = AppScanner(applicationDirectories: [apps, invalid, missing], libraryDirectory: library)
+            .discoverWithDiagnostics()
+        XCTAssertEqual(discovery.apps.count, 1)
+        XCTAssertEqual(discovery.incompleteLocations, [invalid])
+    }
+
     func testMeasuresExactMatchesAndSkipsSharedFilesAndSymlinks() throws {
         let editor = try makeApp(relativePath: "Editor.app")
         let appData = editor.appendingPathComponent("Contents/Resources/data")
