@@ -217,6 +217,22 @@ final class UninstallTests: XCTestCase {
         XCTAssertFalse(result.wasCancelled)
     }
 
+    func testRemovalPlanSummaryCountsTheAppAndSelectedItems() throws {
+        try makeApp(relativePath: "Editor.app")
+        try makeFile(at: library.appendingPathComponent("Caches/\(identifier)"))
+        let app = try XCTUnwrap(scanner.discover().first)
+        let cache = try XCTUnwrap(scanner.measure(app).relatedItems.first)
+
+        let plan = RemovalPlan(app: app, relatedItems: [cache],
+                               bundleUsage: DiskUsage(bytes: 4096, isComplete: true))
+        XCTAssertEqual(plan.itemCount, 2)
+        XCTAssertEqual(plan.estimatedBytes, 4096 + cache.usage.bytes)
+        XCTAssertTrue(plan.isEstimateComplete)
+
+        let incomplete = RemovalPlan(app: app, relatedItems: [cache], bundleUsage: .unavailable)
+        XCTAssertFalse(incomplete.isEstimateComplete)
+    }
+
     @discardableResult
     private func makeApp(relativePath: String) throws -> URL {
         let app = apps.appendingPathComponent(relativePath, isDirectory: true).standardizedFileURL

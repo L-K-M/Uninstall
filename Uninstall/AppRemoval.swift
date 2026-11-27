@@ -4,6 +4,16 @@ struct RemovalPlan: Identifiable, Sendable {
     let id = UUID()
     let app: InstalledApp
     let relatedItems: [RelatedItem]
+    /// Allocated size of the app bundle at scan time, used for review copy.
+    var bundleUsage: DiskUsage = .unavailable
+
+    var itemCount: Int { relatedItems.count + 1 }
+    var estimatedBytes: Int64 {
+        bundleUsage.bytes + relatedItems.reduce(0) { $0 + $1.usage.bytes }
+    }
+    var isEstimateComplete: Bool {
+        bundleUsage.isComplete && relatedItems.allSatisfy(\.usage.isComplete)
+    }
 }
 
 struct RemovalResult: Sendable {
