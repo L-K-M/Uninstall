@@ -33,6 +33,15 @@ Additional open pull requests from this review pass (also reconcile on merge):
 - PR #23: real app icon asset catalog with a continuous-curvature squircle, four-stop gradient, depth effects, and simplified 16/32px bin mark.
 - PR #25: Command-R / Command-Shift-R scan shortcuts, Command-F search focus, and a checkmark on the active sort item.
 
+Open pull requests from this consolidation pass, all CI green but unmerged (reconcile on merge):
+
+- PR #9: real app icon asset catalog and Resources build phase (overlaps the icon work in #23 and #27).
+- PR #15: per-item and total reclaimable sizes in the detail pane, review sheet and success status, plus honest lower-bound copy (overlaps #11, #12 and #19).
+- PR #21: exact-match leftover locations for LaunchAgents, Preferences directories, Application Scripts plists, PreferencePanes, Internet Plug-ins and Quick Look generators, with decoy and hard-link tests (overlaps #7 and #22).
+- PR #24: sentinel-based authorized-move result parsing, distinct cancellation token and name-limit-safe fallback name, with tests (addresses the administrator lifecycle bullet below).
+- PR #26: Show in Trash action that opens the Trash window and reports failure instead of failing silently (overlaps #11 and #19).
+- PR #28: row context actions for Open, Reveal in Finder, Copy Path and graceful Quit, disabled during removal and hidden for protected apps (overlaps #18, #19 and #27).
+
 ## Correctness and safety
 
 - **Make duplicate-detection scope explicit and expandable.** Even a complete scan covers only `/Applications`, `~/Applications` and `/System/Applications`; copies in Downloads, other volumes or custom locations can share data. Add custom scan roots with safeguards against nested roots and symlinks, and explain remaining uncertainty before removing related data.
@@ -45,15 +54,17 @@ Additional open pull requests from this review pass (also reconcile on merge):
 - **Surface silently dropped selections.** When a checked related file is not removable (container not scanned, inaccessible), `prepareRemoval` currently drops it from the plan without explanation. Show a hint naming the skipped items and why.
 - **Improve running-process handling.** `NSWorkspace.runningApplications` misses helpers, command-line tools, XPC services and launch agents. PR #20 added detection of processes whose bundle URL is inside the app bundle; PR #27 added a quit-and-remove action. Still open: explain which exact app or copy must quit, offer a non-forced quit with force fallback, recheck before removal, and investigate safe helper detection without killing unrelated processes.
 - **Re-check running state inside the move loop.** The in-use check happens before the asynchronous move, so an app or sibling copy can launch into the window between the check and the rename/trash operation. Re-verify immediately before each item moves and abort cleanly if the app became active.
-- **Verify vendor uninstallers.** A matching `.app` beside the application or inside `Contents/` (the latter added by PR #20) is opened without checking developer identity or vendor relationship. Show its path and signing information and preferably require a same-team or clearly verified match before opening.
+- **Verify vendor uninstallers.** A matching `.app` beside the application or inside `Contents/` (the latter added by PR #20) is opened without checking developer identity or vendor relationship. Show its path and signing information and preferably require a same-team or clearly verified match before opening. Also detect `.pkg` and script uninstallers rather than only sibling or bundled `.app` bundles.
 - **Disclose multi-user scope.** Cleanup reads only the current user's Library. Removing a shared app can leave other users' caches, preferences and containers behind; say so in review copy before adding any multi-user cleanup.
 - **Tighten stale-file semantics.** Device/inode/birthtime catches replacement but not edits that preserve the inode. Decide whether modification time or content version belongs in identity checks, or adjust the “changed after scan” copy so it does not overstate the guarantee.
-- **Harden the administrator process lifecycle.** Success currently depends on the combined stdout/stderr exactly equaling `moved`, so any diagnostic can turn a successful move into a reported failure. Use a machine-readable final status or sentinel. Add timeout/cancellation for ignored authentication prompts and make process shutdown respond to task cancellation.
-- **Name the app in the authorization prompt.** The generic “needs administrator permission” prompt does not say which app is being moved or why. Include the app name/path, and surface authentication failures with enough context to act on them.
+- **Harden the administrator process lifecycle.** PR #24 replaced exact-output matching with an `UNINSTALL_MOVE_OK` sentinel, added a distinct `UNINSTALL_MOVE_CANCELLED` token, preserved diagnostics and fixed the long-name fallback budget. Still open: timeout/cancellation for ignored authentication prompts, task-cancel-aware process shutdown, naming the app being moved in the authorization prompt, surfacing authentication failures with enough context, and end-to-end tests of the privileged path.
 - **Bound local launch history.** PR #20 prunes `observedLaunches` to known app paths; validating recreated apps at nanosecond birthtime precision (instead of whole-second) is still open.
 - **Make partial-failure semantics explicit.** The app bundle moves first, then related items one at a time; a mid-list failure leaves earlier items in the Trash while later ones still move. Say so in the confirmation, report per-item outcomes, and consider staging all moves through one authorized helper so a failure does not strand a half-removed app.
 - **Queue notices and status instead of overwriting them.** A single optional notice and a single status string mean a second message replaces the first, including during multi-item removals. Keep the most severe message until dismissed, or use a small toast stack.
+- **Prune per-app selection state.** `checkedByApp` lives for the whole view and is only cleared by the scan menu, so reinstalled apps inherit old checkbox choices and the dictionary grows. Prune ids absent from `model.rows`, or store selections relative to item identities.
 - **Explain protection instead of showing a bare lock.** Protected is currently `readOnly || path.hasPrefix("/System/") || isSelf`; the UI says only “This app is protected.” State which rule applied and what would make removal possible.
+- **Keep destructive removal off the main actor.** `AppModel.confirmRemoval` calls synchronous `AppRemoval.perform` inside a plain `Task`, which inherits the main actor, so trashing and `Process.waitUntilExit()` can freeze the UI. Run removal detached and publish results back to the main actor. Measurement already runs off-main through task-group children; preserve that property.
+- **Report multi-problem removals in a real list.** Newline-joined problems go into a plain `Alert` that can truncate. Use a small scrollable sheet with monospace paths and a Copy action.
 
 ## Performance and interaction
 
@@ -66,6 +77,8 @@ Additional open pull requests from this review pass (also reconcile on merge):
 - **Deprioritize protected system apps.** They inflate row and measurement counts but cannot be removed. Hide or collapse them by default, lazily measure them, or provide a clear visibility filter.
 - **Add scan cancellation and lifecycle ownership.** Scans now run as cancellable tasks off the main actor, and PR #20 made the `isScanning` flag cancellation-safe, but the scan menu still cannot cancel them, and scan lifetime is not tied clearly to the window. Provide cancellation, ensure partial state is coherent, and cancel or finish work deliberately when the window closes.
 - **Do not silently drop scan requests.** `refresh()` refuses to run while a removal sheet is open and gives no feedback, so a user-initiated rescan appears to do nothing. Defer it until the sheet closes, explain why it was ignored, or disable the control with a reason.
+- **Fix footer accounting.** The status bar reports the filtered row count, so it jumps while typing in search. Show total rows and the filter match count separately.
+- **Fix unknown-date sort direction.** The comparator always places unknown last-opening rows at the end, even for “Least Recently Opened”.
 - **Support incremental refresh.** Branch work removes moved rows locally instead of rescanning everything. Still needed: re-measure one selected app or container on demand without paying for a full scan.
 
 ## Visual design and product ideas
@@ -81,6 +94,8 @@ Additional open pull requests from this review pass (also reconcile on merge):
 - **Provide a finished app identity.** PR #27 ships a generated `AppIcon` asset catalog (gradient squircle with a trash glyph, all sizes); PR #23 has a more elaborate icon design — reconcile on merge. Still verify the rendered Dock tile, Finder Get Info, dark/light appearances and 16px Finder-sidebar legibility.
 - **Support audit and recovery.** PR #27 stores bounded removal records (original + Trash URLs, capped at 100) and can put items back when the original path is free. Still open: a reviewable history UI, retention controls, and designing put-back collision/permission behavior. Do not promise one-click Put Back until collisions, missing files and permissions are designed.
 - **Localize deliberately.** Strings are hardcoded. Introduce localization infrastructure and audit fixed sheet/detail layouts for longer translations and larger text.
+- **Audit long-text truncation.** Detail header, related-file paths and review-sheet paths need explicit line limits and middle or tail truncation so deep Library paths cannot break layouts at the minimum window width.
+- **Add a disable-able delight layer.** Space-reclaimed counter, factual date-based quips only where the data supports them, a subtle celebration above 1 GB, and keyboard power shortcuts. Keep it opt-out for users who dislike whimsy.
 
 ## High-value feature backlog
 
@@ -88,8 +103,9 @@ Additional open pull requests from this review pass (also reconcile on merge):
 - **Batch uninstall.** PR #27 lands basic multi-select removal with one confirmation sheet and a total size. Still open: a review queue, per-item failures and safe continuation without losing the queue.
 - **Smart cleanup recommendations.** Rank large, unused, duplicate or never-opened apps with factual explanations, not scare copy. (PR #27 adds a not-opened-in-a-year badge; a banner when sorting by size is still open.)
 - **Launch-item awareness.** Branch work detects `~/Library/LaunchAgents` (opt-in) but not LaunchDaemons, login items or helper tools; keep expanding evidence and always offer separately reviewable choices with an explanation. Also consider listing system-level leftovers (PrivilegedHelperTools, system-wide `/Library`) read-only with admin-authorized removal.
-- **Empty-Trash hand-off.** After a move, offer to open or empty the Trash, and show the moved item count/size. Never describe space as freed before the Trash is emptied.
+- **Empty-Trash hand-off.** After a move, offer to open or empty the Trash, and show the moved item count/size. Never describe space as freed before the Trash is emptied. (PRs #11 and #26 add Open Trash affordances; #27 adds Undo.)
 - **Settings and audit export.** A settings scene for scan roots, container-scan default and confirm-before-remove, plus CSV/JSON export of the inventory (name, bundle ID, path, size, last opened, related items) for cleanup planning. (PR #27 lands CSV export of the current list.)
+- **Persistence for preferences.** Sort order, search text, include-containers choice, filters and last selection reset on launch. Persist them in `UserDefaults` or `@SceneStorage` and restore context on relaunch.
 - **Smart selection presets.** One-click “select all removable caches and logs” or “everything over N MB”, built on the existing per-category toggles.
 - **Duplicate-app comparison.** Show version, location, size and last-opened date side by side and help the user keep the right copy.
 - **Drag-and-drop uninstall.** Accept an app dropped on the window or Dock icon, scan it, and open the standard review flow.
@@ -111,3 +127,12 @@ Additional open pull requests from this review pass (also reconcile on merge):
 - Add UI tests or previews for keyboard access, VoiceOver, resizing, long text, large dynamic type, light/dark mode and increased contrast.
 - Test real APFS volumes, external volumes, permissions, symlinked installation roots and a disposable app rather than moving real user data.
 - Verify signed distribution, notarization, app icon rendering at all sizes (Dock, Finder, small sizes), privacy prompts and the administrator path on a clean supported macOS installation before release.
+- Add performance regression coverage around full-scan duration, cold versus warm cache, and large-bundle measurement.
+
+## Considered and deliberately deferred
+
+- Permanent or secure deletion with typed confirmation: powerful but raises the cost of mistakes for little gain while Trash exists.
+- Automatic background scanning, scheduled cleanups and a menu-bar daemon: scope creep for a focused utility unless the menu-bar feature stays read-only.
+- Cross-volume and File Provider/iCloud-aware sizing: easy to get wrong; current “incomplete” labelling is honest.
+- Group-container cleanup: intentionally excluded because containers are shared; revisit only with per-app ownership data.
+- Kernel extensions, system extensions and script leftovers outside exact matches: too risky for this threat model.
