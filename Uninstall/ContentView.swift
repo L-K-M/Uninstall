@@ -235,31 +235,49 @@ struct ContentView: View {
     /// failures come first and read as a warning, not a celebration.
     private func receiptCard(for receipt: RemovalReceipt) -> some View {
         HStack(alignment: .top, spacing: 10) {
-            Image(systemName: receipt.problems.isEmpty ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                .font(.title3)
-                .foregroundStyle(receipt.problems.isEmpty ? Color.accentColor : Color.orange)
+            Image(nsImage: receipt.icon)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 32, height: 32)
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(receipt.summary)
-                    .font(.callout.weight(.medium))
-                Text("Files go to the Trash, where you can restore them. "
-                    + "Empty the Trash to reclaim the space.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
                 if !receipt.problems.isEmpty {
+                    // Failures first: a card that opens with a green tick and buries
+                    // the problem under it reads as a success.
+                    Label(receipt.problems.count == 1 ? "One file couldn’t be moved"
+                                                      : "\(receipt.problems.count) files couldn’t be moved",
+                          systemImage: "exclamationmark.triangle.fill")
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(.orange)
                     ForEach(receipt.problems, id: \.self) { problem in
                         Text(problem)
                             .font(.caption)
                             .foregroundStyle(.orange)
                             .textSelection(.enabled)
                     }
+                } else {
+                    Label(receipt.summary, systemImage: "checkmark.circle.fill")
+                        .font(.callout.weight(.medium))
                 }
+                Text("Files go to the Trash, where you can restore them. "
+                    + "Empty the Trash to reclaim the space.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 HStack(spacing: 8) {
                     Button("Open Trash") { model.openTrash() }
                         .controlSize(.small)
-                    Button("Reveal in Finder") { model.reveal(receipt.appURL) }
-                        .controlSize(.small)
+                    Button("Reveal in Finder") {
+                        if let trashURL = receipt.trashURL {
+                            model.reveal(trashURL)
+                        } else {
+                            model.openTrash()
+                        }
+                    }
+                    .controlSize(.small)
+                    .help(receipt.trashURL == nil
+                          ? "The Trash destination was not reported; opening the Trash instead."
+                          : "Show the app in the Trash")
                     Spacer(minLength: 0)
                     Button("Dismiss") { model.receipt = nil }
                         .controlSize(.small)

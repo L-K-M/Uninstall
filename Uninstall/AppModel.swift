@@ -24,10 +24,13 @@ struct RemovalNotice: Identifiable {
 }
 
 /// What the last removal actually did, so the app can close the loop.
-struct RemovalReceipt: Identifiable, Sendable {
+struct RemovalReceipt: Identifiable {
     let id = UUID()
     let appName: String
-    let appURL: URL
+    /// The app's icon, captured before the move: the bundle is gone afterwards.
+    let icon: NSImage
+    /// Where the app bundle landed in the Trash, if the move reported it.
+    let trashURL: URL?
     let relatedCount: Int
     let problems: [String]
 
@@ -217,7 +220,9 @@ final class AppModel {
                 }
                 if !result.moved.isEmpty {
                     status = nil
-                    receipt = RemovalReceipt(appName: app.name, appURL: app.url,
+                    receipt = RemovalReceipt(appName: app.name,
+                                              icon: NSWorkspace.shared.icon(forFile: app.url.path),
+                                              trashURL: result.trashed.first { $0.original == app.url }?.trash,
                                               relatedCount: movedRelated, problems: result.problems)
                 } else if result.wasCancelled {
                     status = "Removal canceled."

@@ -71,8 +71,9 @@ final class UninstallTests: XCTestCase {
             if let trashURL { try? FileManager.default.removeItem(at: trashURL as URL) }
         }
 
-        let result = AppRemoval.perform(RemovalPlan(app: app, relatedItems: []), moveToTrash: { url in
+        let result = AppRemoval.perform(RemovalPlan(app: app, relatedItems: [], bundleUsage: scanner.measure(app).bundle), moveToTrash: { url in
             try FileManager.default.trashItem(at: url, resultingItemURL: &trashURL)
+            return trashURL as URL? ?? url
         })
 
         XCTAssertEqual(result.moved.map(\.path), [app.url.path])
@@ -126,8 +127,9 @@ final class UninstallTests: XCTestCase {
         try FileManager.default.moveItem(at: preferences, to: preferences.appendingPathExtension("old"))
         try makeFile(at: preferences)
 
-        let result = AppRemoval.perform(RemovalPlan(app: app, relatedItems: [item]), moveToTrash: { _ in
+        let result = AppRemoval.perform(RemovalPlan(app: app, relatedItems: [item], bundleUsage: scanner.measure(app).bundle), moveToTrash: { _ in
             XCTFail("A changed path must not reach the Trash operation")
+            return URL(fileURLWithPath: "/")
         })
 
         XCTAssertTrue(result.moved.isEmpty)
@@ -144,11 +146,12 @@ final class UninstallTests: XCTestCase {
         let selected = scanner.measure(app).relatedItems.filter { $0.category != .preferences }
         XCTAssertEqual(selected.count, 2)
         var attempts: [URL] = []
-        let result = AppRemoval.perform(RemovalPlan(app: app, relatedItems: selected), moveToTrash: { url in
+        let result = AppRemoval.perform(RemovalPlan(app: app, relatedItems: selected, bundleUsage: scanner.measure(app).bundle), moveToTrash: { url in
             attempts.append(url)
             if url.path.contains("/Logs/") {
                 throw CocoaError(.fileWriteNoPermission)
             }
+            return url
         })
 
         XCTAssertEqual(attempts.map(\.path), [app.url.path] + selected.map(\.url.path))
@@ -165,11 +168,13 @@ final class UninstallTests: XCTestCase {
         var authorized: [URL] = []
         var ordinary: [URL] = []
 
-        let result = AppRemoval.perform(RemovalPlan(app: app, relatedItems: [cache]), moveWithAuthorization: {
-            authorized.append($0.url)
+        let result = AppRemoval.perform(RemovalPlan(app: app, relatedItems: [cache], bundleUsage: scanner.measure(app).bundle), moveWithAuthorization: { appToMove in
+            authorized.append(appToMove.url)
+            return appToMove.url
         }, moveToTrash: { url in
             ordinary.append(url)
             if url == app.url { throw CocoaError(.fileWriteNoPermission) }
+            return url
         })
 
         XCTAssertEqual(authorized, [app.url])
@@ -186,7 +191,7 @@ final class UninstallTests: XCTestCase {
         let cache = try XCTUnwrap(scanner.measure(app).relatedItems.first)
         var attempted: [URL] = []
 
-        let result = AppRemoval.perform(RemovalPlan(app: app, relatedItems: [cache]), moveWithAuthorization: { appToMove in
+        let result = AppRemoval.perform(RemovalPlan(app: app, relatedItems: [cache], bundleUsage: scanner.measure(app).bundle), moveWithAuthorization: { appToMove in
             XCTAssertEqual(appToMove.url, app.url)
             throw CocoaError(.userCancelled)
         }, moveToTrash: { url in
@@ -206,8 +211,9 @@ final class UninstallTests: XCTestCase {
         try makeApp(relativePath: "Editor.app")
         let app = try XCTUnwrap(scanner.discover().first)
 
-        let result = AppRemoval.perform(RemovalPlan(app: app, relatedItems: []), moveWithAuthorization: { _ in
+        let result = AppRemoval.perform(RemovalPlan(app: app, relatedItems: [], bundleUsage: scanner.measure(app).bundle), moveWithAuthorization: { _ in
             XCTFail("An invalid filename must not trigger administrator authentication")
+            return URL(fileURLWithPath: "/")
         }, moveToTrash: { _ in
             throw CocoaError(.fileWriteInvalidFileName)
         })
@@ -215,6 +221,58 @@ final class UninstallTests: XCTestCase {
         XCTAssertTrue(result.moved.isEmpty)
         XCTAssertEqual(result.problems.count, 1)
         XCTAssertFalse(result.wasCancelled)
+    }
+
+    func testRemovalReportsWhereEachItemLanded() throws {
+        try makeApp(relativePath: "Editor.app")
+        try makeFile(at: library.appendingPathComponent("Caches/\(identifier)/data"))
+        let app = try XCTUnwrap(scanner.discover().first)
+        let cache = try XCTUnwrap(scanner.measure(app).relatedItems.first { $0.category == .cache })
+        let plan = RemovalPlan(app: app, relatedItems: [cache], bundleUsage: scanner.measure(app).bundle)
+
+        let result = AppRemoval.perform(plan, moveToTrash: { url in
+            url.appendingPathExtension("trashed")
+        })
+
+        XCTAssertEqual(result.moved.map(\.path), [app.url.path, cache.url.path])
+        XCTAssertEqual(result.trashed.map(\.original.path), [app.url.path, cache.url.path])
+        XCTAssertEqual(result.trashed.map(\.trash.path),
+                       [app.url.path + ".trashed", cache.url.path + ".trashed"])
+    }
+
+    func testRemovalKeepsTrashDestinationsWhenAuthorizationIsCancelled() throws {
+        try makeApp(relativePath: "Editor.app")
+        let app = try XCTUnwrap(scanner.discover().first)
+        let plan = RemovalPlan(app: app, relatedItems: [], bundleUsage: scanner.measure(app).bundle)
+
+        let result = AppRemoval.perform(plan, moveWithAuthorization: { _ in
+            throw CocoaError(.userCancelled)
+        }, moveToTrash: { url in
+            if url == app.url { throw CocoaError(.fileWriteNoPermission) }
+            return url.appendingPathExtension("trashed")
+        })
+
+        XCTAssertTrue(result.wasCancelled)
+        XCTAssertTrue(result.moved.isEmpty)
+        XCTAssertTrue(result.trashed.isEmpty)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: app.url.path))
+    }
+
+    func testReceiptSummaryCountsTheAppItself() throws {
+        let receipt = RemovalReceipt(appName: "Editor", icon: NSImage(), trashURL: nil,
+                                     relatedCount: 0, problems: [])
+        XCTAssertEqual(receipt.itemCount, 1)
+        XCTAssertEqual(receipt.summary, "Moved Editor to the Trash.")
+
+        let withOne = RemovalReceipt(appName: "Editor", icon: NSImage(), trashURL: nil,
+                                     relatedCount: 1, problems: [])
+        XCTAssertEqual(withOne.itemCount, 2)
+        XCTAssertEqual(withOne.summary, "Moved Editor and 1 related item to the Trash.")
+
+        let withThree = RemovalReceipt(appName: "Editor", icon: NSImage(), trashURL: nil,
+                                       relatedCount: 3, problems: [])
+        XCTAssertEqual(withThree.itemCount, 4)
+        XCTAssertEqual(withThree.summary, "Moved Editor and 3 related items to the Trash.")
     }
 
     @discardableResult
