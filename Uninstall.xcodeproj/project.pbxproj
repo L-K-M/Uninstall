@@ -14,6 +14,13 @@
 		5CCC4128F4505216EABA9FBB /* UninstallTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE5C90C6D15D190D560E9A57 /* UninstallTests.swift */; };
 		7B51B10174A0255297119BE6 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB3E0248A76CC1BDEAEF34CD /* ContentView.swift */; };
 		893123AD4D84273C7C546005 /* AppScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C72D0733EA128F70B54DD8D /* AppScanner.swift */; };
+		623AAD97B09E4E94914D9C5A /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35219522C2034F899A7C8F10 /* AboutView.swift */; };
+		DBDEE516EFD144B5A831F38C /* AppIconCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36EAA0098EF04FC79DBEC0FA /* AppIconCache.swift */; };
+		7C1A0C1D0159459BAFF6E4ED /* DetailPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08465A84013A402DAA2EF8EA /* DetailPane.swift */; };
+		DEAE7FC727CC4E7EB860E4F8 /* RemovalFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E2F49D31C294271A696DD42 /* RemovalFlow.swift */; };
+		2BAF97C091DA4020B8BDD9AB /* RemovalService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7FEDB3897874529A3FF3294 /* RemovalService.swift */; };
+		6966C7ECD4A444798BAC0209 /* UIFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65BD8D8C0CB74543A8C7196F /* UIFlowTests.swift */; };
+		F9BAEEF6BEE04DF5AC83044F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 980FB26BB07147F1A34A8677 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -36,6 +43,13 @@
 		DE5C90C6D15D190D560E9A57 /* UninstallTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UninstallTests.swift; sourceTree = "<group>"; };
 		FB3E0248A76CC1BDEAEF34CD /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		FC019E86CA33C2E8BD392D08 /* AdministratorTrash.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdministratorTrash.swift; sourceTree = "<group>"; };
+		35219522C2034F899A7C8F10 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
+		36EAA0098EF04FC79DBEC0FA /* AppIconCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIconCache.swift; sourceTree = "<group>"; };
+		08465A84013A402DAA2EF8EA /* DetailPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetailPane.swift; sourceTree = "<group>"; };
+		2E2F49D31C294271A696DD42 /* RemovalFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemovalFlow.swift; sourceTree = "<group>"; };
+		F7FEDB3897874529A3FF3294 /* RemovalService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemovalService.swift; sourceTree = "<group>"; };
+		65BD8D8C0CB74543A8C7196F /* UIFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UIFlowTests.swift; sourceTree = "<group>"; };
+		980FB26BB07147F1A34A8677 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -43,6 +57,7 @@
 			isa = PBXGroup;
 			children = (
 				DE5C90C6D15D190D560E9A57 /* UninstallTests.swift */,
+				65BD8D8C0CB74543A8C7196F /* UIFlowTests.swift */,
 			);
 			path = UninstallTests;
 			sourceTree = "<group>";
@@ -74,6 +89,12 @@
 				8C72D0733EA128F70B54DD8D /* AppScanner.swift */,
 				FB3E0248A76CC1BDEAEF34CD /* ContentView.swift */,
 				379F339D3CDFEAAADAD71E38 /* UninstallApp.swift */,
+				35219522C2034F899A7C8F10 /* AboutView.swift */,
+				36EAA0098EF04FC79DBEC0FA /* AppIconCache.swift */,
+				08465A84013A402DAA2EF8EA /* DetailPane.swift */,
+				2E2F49D31C294271A696DD42 /* RemovalFlow.swift */,
+				F7FEDB3897874529A3FF3294 /* RemovalService.swift */,
+				980FB26BB07147F1A34A8677 /* Assets.xcassets */,
 			);
 			path = Uninstall;
 			sourceTree = "<group>";
@@ -104,6 +125,7 @@
 			buildConfigurationList = 7C41A5482F4A155CDABAF86F /* Build configuration list for PBXNativeTarget "Uninstall" */;
 			buildPhases = (
 				6B3848F2E1227FEA8D9C2F87 /* Sources */,
+				69DD7C5A4BB245609DBED18C /* Resources */,
 			);
 			buildRules = (
 			);
@@ -159,6 +181,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				5CCC4128F4505216EABA9FBB /* UninstallTests.swift in Sources */,
+				6966C7ECD4A444798BAC0209 /* UIFlowTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -172,10 +195,26 @@
 				893123AD4D84273C7C546005 /* AppScanner.swift in Sources */,
 				7B51B10174A0255297119BE6 /* ContentView.swift in Sources */,
 				02E0E92CAECAFF739F0D356A /* UninstallApp.swift in Sources */,
+				623AAD97B09E4E94914D9C5A /* AboutView.swift in Sources */,
+				DBDEE516EFD144B5A831F38C /* AppIconCache.swift in Sources */,
+				7C1A0C1D0159459BAFF6E4ED /* DetailPane.swift in Sources */,
+				DEAE7FC727CC4E7EB860E4F8 /* RemovalFlow.swift in Sources */,
+				2BAF97C091DA4020B8BDD9AB /* RemovalService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXResourcesBuildPhase section */
+		69DD7C5A4BB245609DBED18C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F9BAEEF6BEE04DF5AC83044F /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
 		E9269DEF2C6A1AB59982DA99 /* PBXTargetDependency */ = {
@@ -214,6 +253,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Uninstall;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Public domain (Unlicense)";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -235,6 +275,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Uninstall;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Public domain (Unlicense)";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",

@@ -7,6 +7,8 @@
 
 Uninstall is a native macOS app for reviewing installed apps and moving them to the Trash. Sort by total size or last opened, select an app, and choose **Remove App Only** or **Remove App and Selected Files**. The confirmation sheet lists the paths that will be moved. When moving the app bundle requires administrator access, macOS handles authentication.
 
+Select multiple apps to remove them in one batch, quit a running app and remove it in one step, and use **Undo** in the status bar to put a fresh removal back from the Trash. Row context menus offer Reveal in Finder and Copy Path, and the scan menu can export the app list as CSV.
+
 ## Run locally
 
 Open `Uninstall.xcodeproj` in Xcode and run the **Uninstall** scheme on your Mac, or build it with `scripts/build.sh`. Requires macOS 14 or later. Run the scheme’s tests with **Product → Test**. `scripts/release.sh` cuts a version tag whose CI build publishes the unsigned macOS zip and DMG.
