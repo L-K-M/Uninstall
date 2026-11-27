@@ -1,9 +1,22 @@
 import Foundation
 
 struct RemovalPlan: Identifiable, Sendable {
-    let id = UUID()
+    let id: UUID
     let app: InstalledApp
     let relatedItems: [RelatedItem]
+    /// Allocated bytes of the app bundle, captured at plan time for the review summary.
+    let appBytes: Int64
+
+    init(id: UUID = UUID(), app: InstalledApp, relatedItems: [RelatedItem], appBytes: Int64 = 0) {
+        self.id = id
+        self.app = app
+        self.relatedItems = relatedItems
+        self.appBytes = appBytes
+    }
+
+    var totalBytes: Int64 {
+        appBytes + relatedItems.reduce(into: Int64(0)) { $0 += $1.usage.bytes }
+    }
 }
 
 struct RemovalResult: Sendable {

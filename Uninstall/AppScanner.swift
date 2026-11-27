@@ -21,6 +21,7 @@ struct InstalledApp: Identifiable, Sendable {
     let url: URL
     let name: String
     let bundleIdentifier: String?
+    let version: String?
     let identity: FileIdentity
     let lastOpened: Date?
     let isProtected: Bool
@@ -34,7 +35,7 @@ struct DiskUsage: Sendable {
     static let unavailable = DiskUsage(bytes: 0, isComplete: false)
 }
 
-enum RelatedCategory: String, Sendable {
+enum RelatedCategory: String, Sendable, CaseIterable {
     case cache = "Cache"
     case logs = "Logs"
     case preferences = "Preferences"
@@ -238,7 +239,10 @@ struct AppScanner: Sendable {
         let isSelf = path == Bundle.main.bundleURL.resolvingSymlinksInPath().path
         let isProtected = readOnly || url.path.hasPrefix("/System/") || isSelf
 
+        let version = (bundle.localizedInfoDictionary?["CFBundleShortVersionString"] as? String)
+            ?? (info["CFBundleShortVersionString"] as? String)
         return InstalledApp(id: path, url: url, name: name, bundleIdentifier: bundle.bundleIdentifier,
+                            version: version?.isEmpty == false ? version : nil,
                             identity: identity, lastOpened: lastOpened, isProtected: isProtected,
                             vendorUninstaller: isProtected ? nil : vendorUninstaller(for: url, named: name))
     }

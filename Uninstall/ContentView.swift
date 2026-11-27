@@ -15,6 +15,27 @@ private func displayedPath(_ url: URL) -> String {
     return url.path.hasPrefix(home + "/") ? "~" + url.path.dropFirst(home.count) : url.path
 }
 
+private func relativeDate(_ date: Date) -> String {
+    let formatter = RelativeDateTimeFormatter()
+    formatter.unitsStyle = .full
+    return formatter.localizedString(for: date, relativeTo: Date())
+}
+
+private func categoryColor(_ category: String) -> Color {
+    switch category {
+    case "App": return .accentColor
+    case RelatedCategory.cache.rawValue: return .orange
+    case RelatedCategory.logs.rawValue: return .gray
+    case RelatedCategory.preferences.rawValue: return .blue
+    case RelatedCategory.support.rawValue: return .purple
+    case RelatedCategory.savedState.rawValue: return .teal
+    case RelatedCategory.webData.rawValue: return .indigo
+    case RelatedCategory.scripts.rawValue: return .brown
+    case RelatedCategory.container.rawValue: return .pink
+    default: return .secondary
+    }
+}
+
 struct ContentView: View {
     @State private var model = AppModel()
     @State private var search = ""
@@ -118,6 +139,12 @@ struct ContentView: View {
                 HStack(spacing: 8) {
                     AppIcon(url: row.app.url, size: 24)
                     Text(row.name).lineLimit(1)
+                    if model.isRunning(row.app) {
+                        Circle()
+                            .fill(.green)
+                            .frame(width: 6, height: 6)
+                            .accessibilityLabel("\(row.name) is running")
+                    }
                 }
                 .padding(.vertical, 2)
             }
@@ -137,12 +164,8 @@ struct ContentView: View {
             .width(min: 92, ideal: 104, max: 130)
 
             TableColumn("Last Opened", value: \.lastOpenedSortValue) { row in
-                if let date = row.lastOpened {
-                    Text(date, format: .dateTime.year().month(.abbreviated).day())
-                        .foregroundStyle(.secondary)
-                } else {
-                    Text("Unknown").foregroundStyle(.tertiary)
-                }
+                Text(row.lastOpened.map(relativeDate) ?? "Unknown")
+                    .foregroundStyle(row.lastOpened == nil ? .tertiary : .secondary)
             }
             .width(min: 100, ideal: 112, max: 140)
         }
@@ -196,7 +219,23 @@ struct ContentView: View {
                     HStack(alignment: .center, spacing: 12) {
                         AppIcon(url: row.app.url, size: 48)
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(row.name).font(.title2.weight(.semibold))
+                            HStack(spacing: 6) {
+                                Text(row.name).font(.title2.weight(.semibold)).lineLimit(1)
+                                if model.isRunning(row.app) {
+                                    statusBadge("Running", systemImage: "play.circle", color: .green)
+                                }
+                                if row.hasOtherInstallations {
+                                    statusBadge("Duplicate", systemImage: "doc.on.doc", color: .orange)
+                                }
+                                if row.app.isProtected {
+                                    statusBadge("Protected", systemImage: "lock", color: .secondary)
+                                }
+                            }
+                            if let version = row.app.version {
+                                Text("Version \(version)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                             Text(displayedPath(row.app.url))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
@@ -204,7 +243,7 @@ struct ContentView: View {
                         }
                     }
                     if let footprint = row.footprint {
-                        storage(for: footprint)
+                        storage(for: footprint, row: row)
                         relatedFiles(for: row, footprint: footprint)
                     } else {
                         ProgressView("Measuring storage…").controlSize(.small)
@@ -220,7 +259,16 @@ struct ContentView: View {
         }
     }
 
-    private func storage(for footprint: AppFootprint) -> some View {
+    private func statusBadge(_ label: String, systemImage: String, color: Color) -> some View {
+        Label(label, systemImage: systemImage)
+            .font(.caption2)
+            .foregroundStyle(color)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(color.opacity(0.14), in: Capsule())
+    }
+
+    private func storage(for footprint: AppFootprint, row: AppRow) -> some View {
         VStack(alignment: .leading, spacing: 7) {
             HStack {
                 Text("Storage").font(.headline)
@@ -228,17 +276,52 @@ struct ContentView: View {
                 Text(diskSize(DiskUsage(bytes: footprint.totalBytes, isComplete: footprint.isComplete)))
                     .font(.headline).monospacedDigit()
             }
+            storageBar(for: footprint)
             storageLine("App", value: diskSize(footprint.bundle))
             let relatedUsage = DiskUsage(bytes: footprint.relatedBytes,
                                          isComplete: footprint.relatedInventoryComplete
                                              && footprint.relatedItems.allSatisfy(\.usage.isComplete))
             storageLine("Related Files", value: diskSize(relatedUsage))
+            let selectedBytes = model.selectedBytes(for: row, relatedIDs: checkedFiles(for: row))
+            if selectedBytes > 0 && selectedBytes != footprint.totalBytes {
+                storageLine("Selected for Removal", value: diskSize(selectedBytes))
+                    .foregroundStyle(.primary)
+            }
             if !footprint.isComplete {
                 Label("Some files couldn’t be measured.", systemImage: "info.circle")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            Text("Allocated space estimate. Empty the Trash to reclaim it.")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
         }
+    }
+
+    @ViewBuilder
+    private func storageBar(for footprint: AppFootprint) -> some View {
+        let segments = AppModel.storageSegments(for: footprint)
+        let total = segments.reduce(Int64(0)) { $0 + $1.bytes }
+        if total > 0 {
+            GeometryReader { geo in
+                HStack(spacing: 2) {
+                    ForEach(segments) { segment in
+                        Rectangle()
+                            .fill(categoryColor(segment.category))
+                            .frame(width: max(3, geo.size.width * (Double(segment.bytes) / Double(total))))
+                    }
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 4))
+            }
+            .frame(height: 10)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(storageBreakdownLabel(for: segments))
+        }
+    }
+
+    private func storageBreakdownLabel(for segments: [StorageSegment]) -> String {
+        let parts = segments.map { "\($0.category) \(diskSize($0.bytes))" }
+        return "Storage breakdown: " + parts.joined(separator: ", ")
     }
 
     private func storageLine(_ label: String, value: String) -> some View {
@@ -253,7 +336,18 @@ struct ContentView: View {
     private func relatedFiles(for row: AppRow, footprint: AppFootprint) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Divider()
-            Text("Related Files").font(.headline)
+            HStack {
+                Text("Related Files").font(.headline)
+                Spacer()
+                let removable = removableItems(for: row)
+                if !removable.isEmpty && !row.hasOtherInstallations && !row.app.isProtected {
+                    Button("Select None") { checkedByApp[row.id] = [] }
+                        .disabled(model.removingName != nil)
+                    Button("Select All") { checkedByApp[row.id] = Set(removable.map(\.id)) }
+                        .disabled(model.removingName != nil)
+                }
+            }
+            .font(.caption)
             if row.hasOtherInstallations {
                 Text("Another installed copy uses the same bundle ID. Its related files are shared.")
                     .font(.caption).foregroundStyle(.secondary)
@@ -262,16 +356,22 @@ struct ContentView: View {
                 Text("Storage covers the app bundle.").foregroundStyle(.secondary)
             } else if footprint.relatedItems.isEmpty {
                 Text("No related files found.").foregroundStyle(.secondary)
+            } else if !row.hasOtherInstallations {
+                let removable = removableItems(for: row)
+                Text("\(removable.count) removable · \(diskSize(removable.reduce(Int64(0)) { $0 + $1.usage.bytes }))")
+                    .font(.caption).foregroundStyle(.secondary)
             }
-            ForEach(footprint.relatedItems) { item in
+            ForEach(footprint.relatedItems.sorted { $0.usage.bytes > $1.usage.bytes }) { item in
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
-                        Toggle(item.category.rawValue, isOn: binding(for: item, in: row))
+                        Toggle(itemLabel(item), isOn: binding(for: item, in: row))
                             .toggleStyle(.checkbox)
                             .disabled(!item.canRemove || row.hasOtherInstallations || row.app.isProtected
                                       || model.removingName != nil)
                         Spacer()
-                        Text(item.needsContainerScan ? "Scan needed" : diskSize(item.usage)).monospacedDigit()
+                        Text(item.needsContainerScan ? "Scan needed" : diskSize(item.usage))
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
                     }
                     Text(displayedPath(item.url))
                         .textSelection(.enabled)
@@ -285,6 +385,16 @@ struct ContentView: View {
                 .font(.caption)
             }
         }
+    }
+
+    private func itemLabel(_ item: RelatedItem) -> String {
+        let size = item.needsContainerScan ? "Scan needed" : diskSize(item.usage)
+        return "\(item.category.rawValue) · \(size)"
+    }
+
+    private func removableItems(for row: AppRow) -> [RelatedItem] {
+        guard let footprint = row.footprint else { return [] }
+        return footprint.relatedItems.filter(\.canRemove)
     }
 
     private func controls(for row: AppRow) -> some View {
@@ -301,6 +411,10 @@ struct ContentView: View {
             }
 
             HStack {
+                Button("Reveal in Finder") {
+                    NSWorkspace.shared.selectFile(row.app.url.path, inFileViewerRootedAtPath: "")
+                }
+                .disabled(model.removingName != nil)
                 if row.app.vendorUninstaller != nil {
                     Button("Open Vendor Uninstaller") { model.openVendorUninstaller(for: row) }
                         .disabled(model.removingName != nil)
@@ -312,12 +426,17 @@ struct ContentView: View {
                     Button("Remove App and Selected Files") { model.prepareRemoval(for: row, relatedIDs: selected) }
                         .disabled(disabled || selected.isEmpty || row.hasOtherInstallations)
                 } label: {
-                    Label("Remove…", systemImage: "trash")
+                    Label(removeLabel(selectedCount: selected.count), systemImage: "trash")
                 }
                 .fixedSize()
                 .disabled(disabled)
             }
         }
+    }
+
+    private func removeLabel(selectedCount: Int) -> String {
+        guard selectedCount > 0 else { return "Remove…" }
+        return "Remove App + \(selectedCount) File\(selectedCount == 1 ? "" : "s")…"
     }
 
     private func checkedFiles(for row: AppRow) -> Set<String> {
@@ -382,12 +501,24 @@ private struct RemovalReview: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Move \(plan.app.name) to Trash?").font(.title2.weight(.semibold))
-            Text("The items below will move to the Trash.")
+            HStack(alignment: .center, spacing: 12) {
+                AppIcon(url: plan.app.url, size: 40)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Move \(plan.app.name) to Trash?")
+                        .font(.title2.weight(.semibold)).lineLimit(1)
+                    Text("\(plan.relatedItems.count + 1) items · about \(diskSize(plan.totalBytes))")
+                        .font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                }
+            }
+            Text("These items move to the Trash, not deleted. Empty the Trash to reclaim the space.")
                 .foregroundStyle(.secondary)
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
                     reviewedItem(plan.app.name, url: plan.app.url)
+                    if plan.appBytes > 0 {
+                        Text(diskSize(plan.appBytes))
+                            .font(.caption2).foregroundStyle(.tertiary).monospacedDigit()
+                    }
                     ForEach(plan.relatedItems) { item in
                         reviewedItem(item.category.rawValue, url: item.url)
                         if let note = item.category.note {
@@ -403,11 +534,13 @@ private struct RemovalReview: View {
             HStack {
                 Spacer()
                 Button("Cancel", action: cancel).keyboardShortcut(.cancelAction)
-                Button("Move to Trash", role: .destructive, action: confirm)
+                Button(plan.relatedItems.isEmpty ? "Move App to Trash" : "Move \(plan.relatedItems.count + 1) Items to Trash",
+                       role: .destructive, action: confirm)
+                    .keyboardShortcut(.defaultAction)
             }
         }
         .padding(22)
-        .frame(width: 490)
+        .frame(width: 520)
         .fixedSize(horizontal: false, vertical: true)
     }
 
