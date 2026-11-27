@@ -217,6 +217,37 @@ final class UninstallTests: XCTestCase {
         XCTAssertFalse(result.wasCancelled)
     }
 
+    func testAdministratorMoveOutcomeParsesSentinelDespiteDiagnostics() {
+        XCTAssertEqual(AdministratorTrash.outcome(processStatus: 0,
+                                                  output: "warning\nUNINSTALL_MOVE_OK\n"),
+                       .moved)
+        XCTAssertEqual(AdministratorTrash.outcome(processStatus: 1,
+                                                  output: "boom\nUNINSTALL_MOVE_OK"),
+                       .failed("boom\nUNINSTALL_MOVE_OK"))
+        XCTAssertEqual(AdministratorTrash.outcome(processStatus: 0,
+                                                  output: "notice\nUNINSTALL_MOVE_CANCELLED"),
+                       .cancelled)
+        XCTAssertEqual(AdministratorTrash.outcome(processStatus: 1,
+                                                  output: "notice\nUNINSTALL_MOVE_CANCELLED"),
+                       .cancelled)
+        XCTAssertEqual(AdministratorTrash.outcome(processStatus: 1, output: "boom"),
+                       .failed("boom"))
+        XCTAssertEqual(AdministratorTrash.outcome(processStatus: 0, output: ""),
+                       .failed("macOS could not complete the authorized move to Trash."))
+    }
+
+    func testAlternateTrashNameStaysWithinNameLimit() {
+        let shortStem = String(repeating: "A", count: 200)
+        let shortName = AdministratorTrash.alternateName(for: shortStem)
+        XCTAssertLessThanOrEqual(shortName.utf8.count, 255)
+        XCTAssertTrue(shortName.hasPrefix(shortStem + " ("))
+
+        let longStem = String(repeating: "B", count: 250)
+        let longName = AdministratorTrash.alternateName(for: longStem)
+        XCTAssertLessThanOrEqual(longName.utf8.count, 255)
+        XCTAssertTrue(longName.hasPrefix("App ("))
+    }
+
     @discardableResult
     private func makeApp(relativePath: String) throws -> URL {
         let app = apps.appendingPathComponent(relativePath, isDirectory: true).standardizedFileURL
