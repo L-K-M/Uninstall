@@ -85,6 +85,11 @@ struct AppFootprint: Sendable {
     }
 }
 
+struct AppDiscovery: Sendable {
+    let apps: [InstalledApp]
+    let incompleteLocations: [URL]
+}
+
 struct AppScanner: Sendable {
     let applicationDirectories: [URL]
     let libraryDirectory: URL
@@ -107,22 +112,45 @@ struct AppScanner: Sendable {
     }
 
     func discover() -> [InstalledApp] {
+        discoverWithDiagnostics().apps
+    }
+
+    func discoverWithDiagnostics() -> AppDiscovery {
         let keys: Set<URLResourceKey> = [.isDirectoryKey, .isSymbolicLinkKey, .volumeIsReadOnlyKey]
         var seen = Set<String>()
         var apps: [InstalledApp] = []
+        var incompleteLocations: [URL] = []
 
         for directory in applicationDirectories {
+            var info = stat()
+            if lstat(directory.path, &info) != 0 {
+                if errno != ENOENT { incompleteLocations.append(directory) }
+                continue
+            }
+            guard info.st_mode & mode_t(S_IFMT) == mode_t(S_IFDIR) else {
+                incompleteLocations.append(directory)
+                continue
+            }
             guard let contents = FileManager.default.enumerator(
                 at: directory,
                 includingPropertiesForKeys: Array(keys),
-                options: [.skipsHiddenFiles, .skipsPackageDescendants]
-            ) else { continue }
+                options: [.skipsHiddenFiles, .skipsPackageDescendants],
+                errorHandler: { url, _ in
+                    incompleteLocations.append(url)
+                    return true
+                }
+            ) else {
+                incompleteLocations.append(directory)
+                continue
+            }
 
             for case let url as URL in contents {
-                if Task.isCancelled { return apps }
-                guard let values = try? url.resourceValues(forKeys: keys),
-                      values.isDirectory == true, values.isSymbolicLink != true
-                else { continue }
+                if Task.isCancelled { return AppDiscovery(apps: apps, incompleteLocations: incompleteLocations) }
+                guard let values = try? url.resourceValues(forKeys: keys) else {
+                    incompleteLocations.append(url)
+                    continue
+                }
+                guard values.isDirectory == true, values.isSymbolicLink != true else { continue }
                 if url.pathExtension.lowercased() == "app" {
                     contents.skipDescendants()
                     guard let app = makeApp(at: url, readOnly: values.volumeIsReadOnly == true),
@@ -132,7 +160,7 @@ struct AppScanner: Sendable {
                 }
             }
         }
-        return apps
+        return AppDiscovery(apps: apps, incompleteLocations: incompleteLocations)
     }
 
     func measure(_ app: InstalledApp, includingContainers: Bool = false) -> AppFootprint {

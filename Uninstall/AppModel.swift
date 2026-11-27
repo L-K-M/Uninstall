@@ -28,6 +28,7 @@ final class AppModel {
     private(set) var rows: [AppRow] = []
     private(set) var isScanning = false
     private(set) var completedScans = 0
+    private(set) var incompleteLocations: [URL] = []
     private(set) var removingName: String?
     private(set) var runningPaths: Set<String> = []
     private(set) var status: String?
@@ -55,16 +56,19 @@ final class AppModel {
         scanTask?.cancel()
         isScanning = true
         completedScans = 0
+        incompleteLocations = scanner.applicationDirectories
         refreshRunningApps()
         let scanner = scanner
         let includeContainers = includeContainers
 
         scanTask = Task {
-            let apps = await withTaskGroup(of: [InstalledApp].self) { group in
-                group.addTask { scanner.discover() }
-                return await group.next() ?? []
+            let discovery = await withTaskGroup(of: AppDiscovery.self) { group in
+                group.addTask { scanner.discoverWithDiagnostics() }
+                return await group.next() ?? AppDiscovery(apps: [], incompleteLocations: scanner.applicationDirectories)
             }
             guard !Task.isCancelled else { return }
+            let apps = discovery.apps
+            incompleteLocations = discovery.incompleteLocations
 
             let counts = apps.reduce(into: [String: Int]()) { counts, app in
                 if let identifier = app.bundleIdentifier {
@@ -144,7 +148,7 @@ final class AppModel {
 
     func prepareRemoval(for row: AppRow, relatedIDs: Set<String>) {
         guard !row.app.isProtected, removingName == nil, !isRunning(row.app) else { return }
-        let related = row.hasOtherInstallations ? [] : (row.footprint?.relatedItems ?? []).filter {
+        let related = row.hasOtherInstallations || !incompleteLocations.isEmpty ? [] : (row.footprint?.relatedItems ?? []).filter {
             relatedIDs.contains($0.id) && $0.canRemove
         }
         pendingPlan = RemovalPlan(app: row.app, relatedItems: related)
