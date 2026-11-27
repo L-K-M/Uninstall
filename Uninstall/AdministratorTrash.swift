@@ -63,11 +63,8 @@ enum AdministratorTrash {
         let lines = output.split(separator: "\n").map {
             $0.trimmingCharacters(in: .whitespaces)
         }
-        guard processStatus == 0 else {
-            return .failed(failureMessage(output))
-        }
-        if lines.contains("UNINSTALL_MOVE_OK") { return .moved }
-        if lines.contains("cancelled") { return .cancelled }
+        if lines.contains("UNINSTALL_MOVE_OK"), processStatus == 0 { return .moved }
+        if lines.contains("UNINSTALL_MOVE_CANCELLED") { return .cancelled }
         return .failed(failureMessage(output))
     }
 
@@ -116,7 +113,7 @@ enum AdministratorTrash {
         try
             return do shell script commandLine with prompt "Uninstall needs administrator permission to move the selected app to the Trash." with administrator privileges
         on error messageText number errorNumber
-            if errorNumber is -128 then return "cancelled"
+            if errorNumber is -128 then return "UNINSTALL_MOVE_CANCELLED"
             error messageText number errorNumber
         end try
     end run

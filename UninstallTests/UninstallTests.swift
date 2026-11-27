@@ -221,8 +221,14 @@ final class UninstallTests: XCTestCase {
         XCTAssertEqual(AdministratorTrash.outcome(processStatus: 0,
                                                   output: "warning\nUNINSTALL_MOVE_OK\n"),
                        .moved)
+        XCTAssertEqual(AdministratorTrash.outcome(processStatus: 1,
+                                                  output: "boom\nUNINSTALL_MOVE_OK"),
+                       .failed("boom\nUNINSTALL_MOVE_OK"))
         XCTAssertEqual(AdministratorTrash.outcome(processStatus: 0,
-                                                  output: "notice\ncancelled"),
+                                                  output: "notice\nUNINSTALL_MOVE_CANCELLED"),
+                       .cancelled)
+        XCTAssertEqual(AdministratorTrash.outcome(processStatus: 1,
+                                                  output: "notice\nUNINSTALL_MOVE_CANCELLED"),
                        .cancelled)
         XCTAssertEqual(AdministratorTrash.outcome(processStatus: 1, output: "boom"),
                        .failed("boom"))
