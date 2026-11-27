@@ -27,7 +27,22 @@ struct ContentView: View {
             term.isEmpty || $0.name.localizedStandardContains(term)
                 || $0.app.bundleIdentifier?.localizedStandardContains(term) == true
         }
-        .sorted(by: compare)
+        .sorted(by: compare(order: effectiveSortOrder))
+    }
+
+    /// While a scan is measuring sizes, size and last-opened ordering would
+    /// reshuffle rows under the pointer. Show name order until the scan
+    /// settles, then apply the chosen ordering.
+    private var effectiveSortOrder: [KeyPathComparator<AppRow>] {
+        guard model.isScanning, let first = sortOrder.first else { return sortOrder }
+        if first.keyPath == \AppRow.totalSortValue || first.keyPath == \AppRow.lastOpenedSortValue {
+            return [KeyPathComparator(\AppRow.name)]
+        }
+        return sortOrder
+    }
+
+    private var sortBinding: Binding<[KeyPathComparator<AppRow>]> {
+        Binding(get: { effectiveSortOrder }, set: { sortOrder = $0 })
     }
 
     var body: some View {
@@ -113,7 +128,7 @@ struct ContentView: View {
         @Bindable var model = model
         let rows = visibleRows
 
-        return Table(rows, selection: $model.selection, sortOrder: $sortOrder) {
+        return Table(rows, selection: $model.selection, sortOrder: sortBinding) {
             TableColumn("App", value: \.name) { row in
                 HStack(spacing: 8) {
                     AppIcon(url: row.app.url, size: 24)
@@ -344,21 +359,23 @@ struct ContentView: View {
         model.refresh(includingContainers: includingContainers)
     }
 
-    private func compare(_ left: AppRow, _ right: AppRow) -> Bool {
-        for comparator in sortOrder {
-            if comparator.keyPath == \AppRow.lastOpenedSortValue,
-               (left.lastOpened == nil) != (right.lastOpened == nil) {
-                return left.lastOpened != nil
+    private func compare(order: [KeyPathComparator<AppRow>]) -> (AppRow, AppRow) -> Bool {
+        { left, right in
+            for comparator in order {
+                if comparator.keyPath == \AppRow.lastOpenedSortValue,
+                   (left.lastOpened == nil) != (right.lastOpened == nil) {
+                    return left.lastOpened != nil
+                }
+                if comparator.keyPath == \AppRow.totalSortValue,
+                   (left.footprint == nil) != (right.footprint == nil) {
+                    return left.footprint != nil
+                }
+                let result = comparator.compare(left, right)
+                if result != .orderedSame { return result == .orderedAscending }
             }
-            if comparator.keyPath == \AppRow.totalSortValue,
-               (left.footprint == nil) != (right.footprint == nil) {
-                return left.footprint != nil
-            }
-            let order = comparator.compare(left, right)
-            if order != .orderedSame { return order == .orderedAscending }
+            let nameOrder = left.name.localizedStandardCompare(right.name)
+            return nameOrder == .orderedSame ? left.id < right.id : nameOrder == .orderedAscending
         }
-        let nameOrder = left.name.localizedStandardCompare(right.name)
-        return nameOrder == .orderedSame ? left.id < right.id : nameOrder == .orderedAscending
     }
 }
 
@@ -367,11 +384,28 @@ private struct AppIcon: View {
     let size: CGFloat
 
     var body: some View {
-        Image(nsImage: NSWorkspace.shared.icon(forFile: url.path))
+        Image(nsImage: IconCache.shared.image(for: url))
             .resizable()
             .aspectRatio(contentMode: .fit)
             .frame(width: size, height: size)
             .accessibilityHidden(true)
+    }
+}
+
+/// `NSWorkspace.icon(forFile:)` is called for every visible cell on every
+/// render. Cache the results so scrolling and scan-driven updates do not
+/// repeatedly hit Launch Services.
+private final class IconCache: @unchecked Sendable {
+    static let shared = IconCache()
+
+    private let cache = NSCache<NSString, NSImage>()
+
+    func image(for url: URL) -> NSImage {
+        let key = url.path as NSString
+        if let cached = cache.object(forKey: key) { return cached }
+        let image = NSWorkspace.shared.icon(forFile: url.path)
+        cache.setObject(image, forKey: key)
+        return image
     }
 }
 
