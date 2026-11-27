@@ -43,6 +43,10 @@ enum RelatedCategory: String, Sendable {
     case webData = "Website Data"
     case scripts = "Application Scripts"
     case container = "App Container"
+    case launchAgents = "Launch Agents"
+    case preferencePanes = "Preference Panes"
+    case plugIns = "Plug-ins"
+    case diagnostics = "Diagnostics"
 
     var selectedByDefault: Bool {
         self == .cache || self == .logs
@@ -56,6 +60,12 @@ enum RelatedCategory: String, Sendable {
             "Resets stored preferences."
         case .webData:
             "May include sign-in data."
+        case .launchAgents:
+            "May stop background helpers from launching."
+        case .preferencePanes, .plugIns:
+            "Removes system or browser integration."
+        case .diagnostics:
+            "Crash reports and diagnostic data."
         default:
             nil
         }
@@ -154,6 +164,12 @@ struct AppScanner: Sendable {
             ("WebKit/\(identifier)", .webData),
             ("Application Scripts/\(identifier)", .scripts),
             ("Containers/\(identifier)", .container),
+            ("LaunchAgents/\(identifier).plist", .launchAgents),
+            ("PreferencePanes/\(identifier)", .preferencePanes),
+            ("PreferencePanes/\(identifier).prefPane", .preferencePanes),
+            ("Internet Plug-Ins/\(identifier)", .plugIns),
+            ("Internet Plug-Ins/\(identifier).plugin", .plugIns),
+            ("Application Support/CrashReporter/\(identifier)", .diagnostics),
         ]
 
         let byHost = libraryDirectory.appendingPathComponent("Preferences/ByHost", isDirectory: true)
@@ -183,9 +199,15 @@ struct AppScanner: Sendable {
 
             var info = stat()
             guard lstat(url.path, &info) == 0 else {
-                if errno == EACCES || errno == EPERM {
+                switch errno {
+                case ENOENT:
+                    break
+                case EACCES, EPERM:
                     relatedItems.append(RelatedItem(url: url, category: candidate.category,
                                                     identity: nil, usage: .unavailable))
+                default:
+                    // An unexpected failure means we cannot claim the inventory is complete.
+                    relatedInventoryComplete = false
                 }
                 continue
             }
@@ -216,12 +238,11 @@ struct AppScanner: Sendable {
         return FileIdentity(info)
     }
 
+    /// Bundle identifiers are used as path components, so anything that cannot appear in a
+    /// single component is rejected rather than an allowlist of characters.
     private static func isPathComponent(_ identifier: String) -> Bool {
         !identifier.isEmpty && identifier != "." && identifier != ".."
-            && identifier.utf8.allSatisfy { byte in
-                (65...90).contains(byte) || (97...122).contains(byte) || (48...57).contains(byte)
-                    || byte == 45 || byte == 46
-            }
+            && !identifier.contains("/") && !identifier.contains("\0")
     }
 
     private func makeApp(at url: URL, readOnly: Bool) -> InstalledApp? {

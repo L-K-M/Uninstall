@@ -17,7 +17,7 @@ Uninstall scans `/Applications`, `~/Applications`, and `/System/Applications`, i
 
 The size column estimates allocated disk space for the app bundle and related files identified by bundle ID in the current user’s Library. For protected apps, Uninstall measures the app bundle. Choose **Scan Including App Containers** in the scan menu to measure those folders for removable apps. macOS may prompt for access. Inaccessible files are marked as unavailable, and incomplete totals are shown as lower bounds.
 
-Preferences, application support, and containers are optional selections in the removal review. Caches and logs are preselected. Group containers are excluded, and cleanup is disabled for files shared by duplicate installations in the scanned locations. Some apps use custom locations that a bundle-ID scan cannot identify. Uninstall shows a vendor uninstaller when it finds a matching one next to the app.
+Preferences, application support, and containers are optional selections in the removal review. Caches and logs are preselected. Launch agents, preference panes, plug-ins, and diagnostic data are detected but never preselected. Group containers are excluded, and cleanup is disabled for files shared by duplicate installations in the scanned locations. Some apps use custom locations that a bundle-ID scan cannot identify. Uninstall shows a vendor uninstaller when it finds a matching one next to the app.
 
 Files moved to Trash can be restored from there. Their disk space becomes available after the Trash is emptied.
 

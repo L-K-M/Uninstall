@@ -217,8 +217,37 @@ final class UninstallTests: XCTestCase {
         XCTAssertFalse(result.wasCancelled)
     }
 
+    func testRelatedFilesAreFoundForBundleIdentifiersWithUnderscores() throws {
+        let identifier = "dev.example.My_App"
+        try makeApp(relativePath: "Editor.app", identifier: identifier)
+        try makeFile(at: library.appendingPathComponent("Caches/\(identifier)/data"))
+        let app = try XCTUnwrap(scanner.discover().first)
+
+        let footprint = scanner.measure(app)
+        XCTAssertEqual(footprint.relatedItems.map(\.category), [.cache])
+    }
+
+    func testDiscoversLeftoverCategoriesWithoutPreselectingThem() throws {
+        try makeApp(relativePath: "Editor.app")
+        try makeFile(at: library.appendingPathComponent("LaunchAgents/\(identifier).plist"))
+        try makeFile(at: library.appendingPathComponent("PreferencePanes/\(identifier).prefPane/Info.plist"))
+        try makeFile(at: library.appendingPathComponent("Internet Plug-Ins/\(identifier).plugin/Info.plist"))
+        try makeFile(at: library.appendingPathComponent("Application Support/CrashReporter/\(identifier)/report"))
+        let app = try XCTUnwrap(scanner.discover().first)
+
+        let items = scanner.measure(app).relatedItems
+        let categories = Set(items.map(\.category))
+        XCTAssertTrue(categories.isSuperset(of: [.launchAgents, .preferencePanes, .plugIns, .diagnostics]))
+        XCTAssertFalse(items.contains { $0.category.selectedByDefault })
+    }
+
     @discardableResult
     private func makeApp(relativePath: String) throws -> URL {
+        try makeApp(relativePath: relativePath, identifier: identifier)
+    }
+
+    @discardableResult
+    private func makeApp(relativePath: String, identifier: String) throws -> URL {
         let app = apps.appendingPathComponent(relativePath, isDirectory: true).standardizedFileURL
         let plist = app.appendingPathComponent("Contents/Info.plist")
         let info = ["CFBundleIdentifier": identifier, "CFBundlePackageType": "APPL"]
