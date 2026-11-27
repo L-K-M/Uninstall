@@ -288,7 +288,8 @@ struct ContentView: View {
     }
 
     private func controls(for row: AppRow) -> some View {
-        let disabled = row.app.isProtected || model.isRunning(row.app) || model.removingName != nil
+        let disabled = row.app.isProtected || model.isRunning(row.app)
+            || model.removingName != nil || row.footprint == nil
         let selected = checkedFiles(for: row)
 
         return VStack(alignment: .leading, spacing: 8) {
@@ -304,7 +305,6 @@ struct ContentView: View {
                 if row.app.vendorUninstaller != nil {
                     Button("Open Vendor Uninstaller") { model.openVendorUninstaller(for: row) }
                         .disabled(model.removingName != nil)
-                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
 
@@ -339,6 +339,7 @@ struct ContentView: View {
 
     private func selectedUsage(for row: AppRow) -> DiskUsage {
         guard let footprint = row.footprint else { return .unavailable }
+        guard !row.hasOtherInstallations, !row.app.isProtected else { return footprint.bundle }
         let checked = checkedFiles(for: row)
         let items = footprint.relatedItems.filter { checked.contains($0.id) && $0.canRemove }
         return RemovalPlan.usage(bundle: footprint.bundle, related: items)
@@ -399,10 +400,15 @@ private struct RemovalReview: View {
     let cancel: () -> Void
     let confirm: () -> Void
 
+    private var itemCountText: String {
+        let count = plan.relatedItems.count + 1
+        return "\(count) \(count == 1 ? "item" : "items") will move to the Trash."
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Move \(plan.app.name) to Trash?").font(.title2.weight(.semibold))
-            Text("\(plan.relatedItems.count + 1) items will move to the Trash.")
+            Text(itemCountText)
                 .foregroundStyle(.secondary)
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 2) {
@@ -414,7 +420,7 @@ private struct RemovalReview: View {
                         .monospacedDigit()
                 }
                 Spacer()
-                if !plan.reclaimableUsage.isComplete {
+                if !plan.reclaimableUsage.isComplete && plan.reclaimableUsage.bytes > 0 {
                     Label("Lower bound", systemImage: "info.circle")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -449,7 +455,7 @@ private struct RemovalReview: View {
     private func reviewedItem(_ name: String, url: URL, size: DiskUsage) -> some View {
         HStack(alignment: .top, spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(name).fontWeight(.medium)
+                Text(name).fontWeight(.medium).lineLimit(1)
                 Text(displayedPath(url))
                     .font(.caption).foregroundStyle(.secondary)
                     .textSelection(.enabled)
@@ -461,6 +467,7 @@ private struct RemovalReview: View {
                 .font(.caption)
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
+                .lineLimit(1)
         }
     }
 }

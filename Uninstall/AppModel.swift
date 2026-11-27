@@ -210,7 +210,11 @@ final class AppModel {
                     case 1: "Moved \(app.name) and 1 related item to Trash."
                     default: "Moved \(app.name) and \(count) related items to Trash."
                     }
-                    status = "\(base) Freed \(freedIsComplete ? "" : "at least ")\(freed)."
+                    if plan.reclaimableUsage.bytes > 0 || plan.reclaimableUsage.isComplete {
+                        status = "\(base) Freed \(freedIsComplete ? "" : "at least ")\(freed)."
+                    } else {
+                        status = base
+                    }
                 } else if result.wasCancelled {
                     status = "Removal canceled."
                 }
