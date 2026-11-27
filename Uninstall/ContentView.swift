@@ -312,7 +312,7 @@ struct ContentView: View {
                 Text("Selected")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Text(diskSize(selectedUsage(for: row)))
+                Text(row.footprint == nil ? "—" : diskSize(selectedUsage(for: row)))
                     .font(.caption.weight(.semibold))
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
