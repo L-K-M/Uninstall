@@ -200,6 +200,11 @@ final class AppModel {
         }
     }
 
+    /// Reveals a file in Finder without opening it.
+    func reveal(_ url: URL) {
+        NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+
     func openVendorUninstaller(for row: AppRow) {
         guard let url = row.app.vendorUninstaller else { return }
         if !NSWorkspace.shared.open(url) {
