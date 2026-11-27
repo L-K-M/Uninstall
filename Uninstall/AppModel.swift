@@ -23,6 +23,13 @@ struct RemovalNotice: Identifiable {
     let message: String
 }
 
+/// One colored slice of the storage breakdown shown in the detail pane.
+struct StorageSegment: Identifiable, Sendable {
+    var id: String { category }
+    let category: String
+    let bytes: Int64
+}
+
 @MainActor @Observable
 final class AppModel {
     private(set) var rows: [AppRow] = []
@@ -42,6 +49,32 @@ final class AppModel {
     @ObservationIgnored private var observedLaunches = UserDefaults.standard.object(forKey: "observedLaunches") as? [String: Double] ?? [:]
 
     var selectedRow: AppRow? { rows.first { $0.id == selection } }
+
+    /// Bytes that would move to the Trash for the current selection, for the detail pane summary.
+    func selectedBytes(for row: AppRow, relatedIDs: Set<String>) -> Int64 {
+        guard let footprint = row.footprint else { return 0 }
+        var total = footprint.bundle.bytes
+        for item in footprint.relatedItems where relatedIDs.contains(item.id) && item.canRemove {
+            total += item.usage.bytes
+        }
+        return total
+    }
+
+    nonisolated static func storageSegments(for footprint: AppFootprint) -> [StorageSegment] {
+        var segments: [StorageSegment] = []
+        if footprint.bundle.bytes > 0 {
+            segments.append(StorageSegment(category: "App", bytes: footprint.bundle.bytes))
+        }
+        var byCategory: [RelatedCategory: Int64] = [:]
+        for item in footprint.relatedItems {
+            byCategory[item.category, default: 0] += item.usage.bytes
+        }
+        for category in RelatedCategory.allCases {
+            let bytes = byCategory[category] ?? 0
+            if bytes > 0 { segments.append(StorageSegment(category: category.rawValue, bytes: bytes)) }
+        }
+        return segments
+    }
 
     func start() {
         guard !didStart else { return }
@@ -147,7 +180,7 @@ final class AppModel {
         let related = row.hasOtherInstallations ? [] : (row.footprint?.relatedItems ?? []).filter {
             relatedIDs.contains($0.id) && $0.canRemove
         }
-        pendingPlan = RemovalPlan(app: row.app, relatedItems: related)
+        pendingPlan = RemovalPlan(app: row.app, relatedItems: related, appBytes: row.footprint?.bundle.bytes ?? 0)
     }
 
     func confirmRemoval(_ plan: RemovalPlan) {

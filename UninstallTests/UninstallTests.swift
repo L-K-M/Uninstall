@@ -107,6 +107,7 @@ final class UninstallTests: XCTestCase {
         try makeFile(at: library.appendingPathComponent("Caches/\(identifier)/data"))
         let app = try XCTUnwrap(scanner.discover().first)
         let protected = InstalledApp(id: app.id, url: app.url, name: app.name, bundleIdentifier: app.bundleIdentifier,
+                                     version: app.version,
                                      identity: app.identity, lastOpened: app.lastOpened, isProtected: true,
                                      vendorUninstaller: nil)
         let footprint = scanner.measure(protected, includingContainers: true)
@@ -215,6 +216,51 @@ final class UninstallTests: XCTestCase {
         XCTAssertTrue(result.moved.isEmpty)
         XCTAssertEqual(result.problems.count, 1)
         XCTAssertFalse(result.wasCancelled)
+    }
+
+    func testStorageSegmentsGroupRelatedItemsByCategory() {
+        let cache = RelatedItem(url: URL(fileURLWithPath: "/tmp/cache"), category: .cache,
+                                identity: nil, usage: DiskUsage(bytes: 30, isComplete: true))
+        let logs = RelatedItem(url: URL(fileURLWithPath: "/tmp/logs"), category: .logs,
+                               identity: nil, usage: DiskUsage(bytes: 20, isComplete: true))
+        let footprint = AppFootprint(bundle: DiskUsage(bytes: 100, isComplete: true),
+                                     relatedItems: [cache, logs], relatedInventoryComplete: true)
+
+        let segments = AppModel.storageSegments(for: footprint)
+        XCTAssertEqual(segments.map(\.category), ["App", "Cache", "Logs"])
+        XCTAssertEqual(segments.map(\.bytes), [100, 30, 20])
+    }
+
+    @MainActor
+    func testSelectedBytesSumsBundleAndOnlyChosenRemovableItems() {
+        let model = AppModel()
+        let app = sampleApp()
+        let removable = RelatedItem(url: URL(fileURLWithPath: "/tmp/removable"), category: .cache,
+                                    identity: makeIdentity(), usage: DiskUsage(bytes: 100, isComplete: true))
+        let blocked = RelatedItem(url: URL(fileURLWithPath: "/tmp/blocked"), category: .container,
+                                  identity: nil, usage: DiskUsage(bytes: 9_999, isComplete: false))
+        let row = AppRow(app: app,
+                         footprint: AppFootprint(bundle: DiskUsage(bytes: 500, isComplete: true),
+                                                 relatedItems: [removable, blocked],
+                                                 relatedInventoryComplete: true))
+
+        XCTAssertEqual(model.selectedBytes(for: row, relatedIDs: []), 500)
+        XCTAssertEqual(model.selectedBytes(for: row, relatedIDs: [removable.id]), 600)
+        XCTAssertEqual(model.selectedBytes(for: row, relatedIDs: [blocked.id]), 500)
+    }
+
+    private func sampleApp() -> InstalledApp {
+        let url = URL(fileURLWithPath: "/tmp/Sample.app", isDirectory: true)
+        return InstalledApp(id: url.path, url: url, name: "Sample", bundleIdentifier: "dev.example.sample",
+                            version: "1.2.3", identity: makeIdentity(), lastOpened: nil,
+                            isProtected: false, vendorUninstaller: nil)
+    }
+
+    private func makeIdentity() -> FileIdentity {
+        var info = stat()
+        info.st_dev = 1
+        info.st_ino = 1
+        return FileIdentity(info)
     }
 
     @discardableResult
