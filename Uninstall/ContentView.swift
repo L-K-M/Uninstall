@@ -233,6 +233,9 @@ struct ContentView: View {
                                          isComplete: footprint.relatedInventoryComplete
                                              && footprint.relatedItems.allSatisfy(\.usage.isComplete))
             storageLine("Related Files", value: diskSize(relatedUsage))
+            Text("Sizes are estimates. Space becomes available after the Trash is emptied; shared storage and snapshots can affect the amount recovered.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
             if !footprint.isComplete {
                 Label("Some files couldn’t be measured.", systemImage: "info.circle")
                     .font(.caption)
@@ -385,6 +388,11 @@ private struct RemovalReview: View {
             Text("Move \(plan.app.name) to Trash?").font(.title2.weight(.semibold))
             Text("The items below will move to the Trash.")
                 .foregroundStyle(.secondary)
+            if !plan.relatedItems.isEmpty {
+                Text("Related files are matched by bundle ID. Other copies outside the scanned app folders may use them too.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
                     reviewedItem(plan.app.name, url: plan.app.url)
