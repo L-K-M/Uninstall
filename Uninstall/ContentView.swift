@@ -288,7 +288,8 @@ struct ContentView: View {
     }
 
     private func controls(for row: AppRow) -> some View {
-        let disabled = row.app.isProtected || model.isRunning(row.app) || model.removingName != nil
+        let disabled = row.app.isProtected || model.isRunning(row.app)
+            || model.removingName != nil || row.footprint == nil
         let selected = checkedFiles(for: row)
 
         return VStack(alignment: .leading, spacing: 8) {
@@ -305,6 +306,17 @@ struct ContentView: View {
                     Button("Open Vendor Uninstaller") { model.openVendorUninstaller(for: row) }
                         .disabled(model.removingName != nil)
                 }
+            }
+
+            HStack(spacing: 10) {
+                Text("Selected")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(row.footprint == nil ? "—" : diskSize(selectedUsage(for: row)))
+                    .font(.caption.weight(.semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
                 Spacer(minLength: 0)
                 Menu {
                     Button("Remove App Only") { model.prepareRemoval(for: row, relatedIDs: []) }
@@ -323,6 +335,14 @@ struct ContentView: View {
     private func checkedFiles(for row: AppRow) -> Set<String> {
         checkedByApp[row.id] ?? Set((row.footprint?.relatedItems ?? [])
             .filter { $0.canRemove && $0.category.selectedByDefault }.map(\.id))
+    }
+
+    private func selectedUsage(for row: AppRow) -> DiskUsage {
+        guard let footprint = row.footprint else { return .unavailable }
+        guard !row.hasOtherInstallations, !row.app.isProtected else { return footprint.bundle }
+        let checked = checkedFiles(for: row)
+        let items = footprint.relatedItems.filter { checked.contains($0.id) && $0.canRemove }
+        return RemovalPlan.usage(bundle: footprint.bundle, related: items)
     }
 
     private func binding(for item: RelatedItem, in row: AppRow) -> Binding<Bool> {
@@ -380,16 +400,37 @@ private struct RemovalReview: View {
     let cancel: () -> Void
     let confirm: () -> Void
 
+    private var itemCountText: String {
+        let count = plan.relatedItems.count + 1
+        return "\(count) \(count == 1 ? "item" : "items") will move to the Trash."
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Move \(plan.app.name) to Trash?").font(.title2.weight(.semibold))
-            Text("The items below will move to the Trash.")
+            Text(itemCountText)
                 .foregroundStyle(.secondary)
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Total to free")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text(diskSize(plan.reclaimableUsage))
+                        .font(.title3.weight(.semibold))
+                        .monospacedDigit()
+                }
+                Spacer()
+                if !plan.reclaimableUsage.isComplete && plan.reclaimableUsage.bytes > 0 {
+                    Label("Lower bound", systemImage: "info.circle")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
-                    reviewedItem(plan.app.name, url: plan.app.url)
+                    reviewedItem(plan.app.name, url: plan.app.url, size: plan.appUsage)
                     ForEach(plan.relatedItems) { item in
-                        reviewedItem(item.category.rawValue, url: item.url)
+                        reviewedItem(item.category.rawValue, url: item.url, size: item.usage)
                         if let note = item.category.note {
                             Text(note).font(.caption).foregroundStyle(.secondary)
                         }
@@ -411,12 +452,22 @@ private struct RemovalReview: View {
         .fixedSize(horizontal: false, vertical: true)
     }
 
-    private func reviewedItem(_ name: String, url: URL) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(name).fontWeight(.medium)
-            Text(displayedPath(url))
-                .font(.caption).foregroundStyle(.secondary)
-                .textSelection(.enabled)
+    private func reviewedItem(_ name: String, url: URL, size: DiskUsage) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(name).fontWeight(.medium).lineLimit(1)
+                Text(displayedPath(url))
+                    .font(.caption).foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            Spacer(minLength: 8)
+            Text(diskSize(size))
+                .font(.caption)
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
         }
     }
 }
