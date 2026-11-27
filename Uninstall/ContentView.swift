@@ -20,12 +20,14 @@ struct ContentView: View {
     @State private var search = ""
     @State private var sortOrder = [KeyPathComparator(\AppRow.totalSortValue, order: .reverse)]
     @State private var checkedByApp: [String: Set<String>] = [:]
+    @FocusState private var searchFocused: Bool
 
     private var visibleRows: [AppRow] {
         let term = search.trimmingCharacters(in: .whitespacesAndNewlines)
         return model.rows.filter {
             term.isEmpty || $0.name.localizedStandardContains(term)
                 || $0.app.bundleIdentifier?.localizedStandardContains(term) == true
+                || displayedPath($0.app.url).localizedStandardContains(term)
         }
         .sorted(by: compare)
     }
@@ -79,8 +81,22 @@ struct ContentView: View {
             ToolbarItem(placement: .automatic) {
                 TextField("Search apps", text: $search)
                     .textFieldStyle(.roundedBorder)
+                    .focused($searchFocused)
                     .frame(width: 180)
                     .accessibilityLabel("Search apps")
+                    .overlay(alignment: .trailing) {
+                        if !search.isEmpty {
+                            Button {
+                                search = ""
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.trailing, 6)
+                            .accessibilityLabel("Clear search")
+                        }
+                    }
             }
         }
         .task { model.start() }
@@ -95,10 +111,8 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             model.refreshRunningApps()
         }
-        .onChange(of: search) {
-            if !visibleRows.contains(where: { $0.id == model.selection }) {
-                model.selection = nil
-            }
+        .onReceive(NotificationCenter.default.publisher(for: .focusAppSearch)) { _ in
+            searchFocused = true
         }
         .sheet(item: $model.pendingPlan) { plan in
             RemovalReview(plan: plan, cancel: { model.pendingPlan = nil },
