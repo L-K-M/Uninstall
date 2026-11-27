@@ -20,19 +20,19 @@ final class UninstallTests: XCTestCase {
         try FileManager.default.removeItem(at: root)
     }
 
-    func testDiscoversAppsInFoldersWithoutFollowingSymlinksOrEmbeddedApps() throws {
+    func testDiscoversAppsInFoldersWithoutFollowingSymlinksOrEmbeddedApps() async throws {
         let editor = try makeApp(relativePath: "Vendor/Editor.app")
         try makeApp(relativePath: "Vendor/Editor.app/Contents/Helpers/Embedded.app")
         try makeApp(relativePath: "../Outside/Other.app")
         let link = apps.appendingPathComponent("Linked")
         try FileManager.default.createSymbolicLink(at: link, withDestinationURL: root.appendingPathComponent("Outside"))
 
-        let installed = scanner.discover()
+        let installed = await scanner.discover()
         XCTAssertEqual(installed.map { $0.url.resolvingSymlinksInPath().path }, [editor.resolvingSymlinksInPath().path])
         XCTAssertEqual(installed.first?.bundleIdentifier, identifier)
     }
 
-    func testMeasuresExactMatchesAndSkipsSharedFilesAndSymlinks() throws {
+    func testMeasuresExactMatchesAndSkipsSharedFilesAndSymlinks() async throws {
         let editor = try makeApp(relativePath: "Editor.app")
         let appData = editor.appendingPathComponent("Contents/Resources/data")
         try makeFile(at: appData)
@@ -51,7 +51,8 @@ final class UninstallTests: XCTestCase {
         try FileManager.default.createDirectory(at: support, withIntermediateDirectories: true)
         try FileManager.default.createSymbolicLink(at: support.appendingPathComponent(identifier), withDestinationURL: outside)
 
-        let app = try XCTUnwrap(scanner.discover().first)
+        let discovered = await scanner.discover()
+        let app = try XCTUnwrap(discovered.first)
         let footprint = scanner.measure(app)
         XCTAssertTrue(footprint.isComplete)
         XCTAssertEqual(Set(footprint.relatedItems.map(\.url.path)), Set([cache.path, preferences.path, hostPreferences.path]))
@@ -61,11 +62,12 @@ final class UninstallTests: XCTestCase {
         XCTAssertEqual(footprint.totalBytes, footprint.bundle.bytes + footprint.relatedBytes)
     }
 
-    func testAppOnlyMovesJustTheBundleToTrash() throws {
+    func testAppOnlyMovesJustTheBundleToTrash() async throws {
         try makeApp(relativePath: "Editor.app")
         let preferences = library.appendingPathComponent("Preferences/\(identifier).plist")
         try makeFile(at: preferences)
-        let app = try XCTUnwrap(scanner.discover().first)
+        let discovered = await scanner.discover()
+        let app = try XCTUnwrap(discovered.first)
         var trashURL: NSURL?
         defer {
             if let trashURL { try? FileManager.default.removeItem(at: trashURL as URL) }
@@ -82,11 +84,12 @@ final class UninstallTests: XCTestCase {
         XCTAssertNotNil(trashURL)
     }
 
-    func testAppContainersAreMeasuredOnlyOnRequest() throws {
+    func testAppContainersAreMeasuredOnlyOnRequest() async throws {
         try makeApp(relativePath: "Editor.app")
         let containerFile = library.appendingPathComponent("Containers/\(identifier)/Data/Library/Cache")
         try makeFile(at: containerFile)
-        let app = try XCTUnwrap(scanner.discover().first)
+        let discovered = await scanner.discover()
+        let app = try XCTUnwrap(discovered.first)
 
         let standard = scanner.measure(app)
         let deferred = try XCTUnwrap(standard.relatedItems.first)
@@ -102,10 +105,11 @@ final class UninstallTests: XCTestCase {
         XCTAssertEqual(full.relatedBytes, try allocatedBytes(containerFile))
     }
 
-    func testProtectedAppsAreMeasuredWithoutOpeningRelatedFiles() throws {
+    func testProtectedAppsAreMeasuredWithoutOpeningRelatedFiles() async throws {
         try makeApp(relativePath: "Editor.app")
         try makeFile(at: library.appendingPathComponent("Caches/\(identifier)/data"))
-        let app = try XCTUnwrap(scanner.discover().first)
+        let discovered = await scanner.discover()
+        let app = try XCTUnwrap(discovered.first)
         let protected = InstalledApp(id: app.id, url: app.url, name: app.name, bundleIdentifier: app.bundleIdentifier,
                                      identity: app.identity, lastOpened: app.lastOpened, isProtected: true,
                                      vendorUninstaller: nil)
@@ -115,11 +119,12 @@ final class UninstallTests: XCTestCase {
         XCTAssertEqual(footprint.totalBytes, footprint.bundle.bytes)
     }
 
-    func testStaleRelatedFileAbortsBeforeTheAppIsMoved() throws {
+    func testStaleRelatedFileAbortsBeforeTheAppIsMoved() async throws {
         try makeApp(relativePath: "Editor.app")
         let preferences = library.appendingPathComponent("Preferences/\(identifier).plist")
         try makeFile(at: preferences)
-        let app = try XCTUnwrap(scanner.discover().first)
+        let discovered = await scanner.discover()
+        let app = try XCTUnwrap(discovered.first)
         let item = try XCTUnwrap(scanner.measure(app).relatedItems.first)
 
         // Retain the first inode so the new item cannot reuse it.
@@ -135,12 +140,13 @@ final class UninstallTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: app.url.path))
     }
 
-    func testOnlySelectedRelatedFilesAreMovedAndPartialFailureIsReported() throws {
+    func testOnlySelectedRelatedFilesAreMovedAndPartialFailureIsReported() async throws {
         try makeApp(relativePath: "Editor.app")
         for path in ["Caches/\(identifier)", "Logs/\(identifier)", "Preferences/\(identifier).plist"] {
             try makeFile(at: library.appendingPathComponent(path))
         }
-        let app = try XCTUnwrap(scanner.discover().first)
+        let discovered = await scanner.discover()
+        let app = try XCTUnwrap(discovered.first)
         let selected = scanner.measure(app).relatedItems.filter { $0.category != .preferences }
         XCTAssertEqual(selected.count, 2)
         var attempts: [URL] = []
@@ -157,10 +163,11 @@ final class UninstallTests: XCTestCase {
         XCTAssertTrue(try XCTUnwrap(result.problems.first).contains("/Logs/"))
     }
 
-    func testPermissionDeniedRetriesTheAppWithAuthorization() throws {
+    func testPermissionDeniedRetriesTheAppWithAuthorization() async throws {
         try makeApp(relativePath: "Editor.app")
         try makeFile(at: library.appendingPathComponent("Caches/\(identifier)"))
-        let app = try XCTUnwrap(scanner.discover().first)
+        let discovered = await scanner.discover()
+        let app = try XCTUnwrap(discovered.first)
         let cache = try XCTUnwrap(scanner.measure(app).relatedItems.first)
         var authorized: [URL] = []
         var ordinary: [URL] = []
@@ -179,10 +186,11 @@ final class UninstallTests: XCTestCase {
         XCTAssertFalse(result.wasCancelled)
     }
 
-    func testCancellingAuthorizationStopsBeforeMovingRelatedFiles() throws {
+    func testCancellingAuthorizationStopsBeforeMovingRelatedFiles() async throws {
         try makeApp(relativePath: "Editor.app")
         try makeFile(at: library.appendingPathComponent("Caches/\(identifier)"))
-        let app = try XCTUnwrap(scanner.discover().first)
+        let discovered = await scanner.discover()
+        let app = try XCTUnwrap(discovered.first)
         let cache = try XCTUnwrap(scanner.measure(app).relatedItems.first)
         var attempted: [URL] = []
 
@@ -202,9 +210,10 @@ final class UninstallTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: cache.url.path))
     }
 
-    func testOtherTrashErrorsDoNotRequestAuthorization() throws {
+    func testOtherTrashErrorsDoNotRequestAuthorization() async throws {
         try makeApp(relativePath: "Editor.app")
-        let app = try XCTUnwrap(scanner.discover().first)
+        let discovered = await scanner.discover()
+        let app = try XCTUnwrap(discovered.first)
 
         let result = AppRemoval.perform(RemovalPlan(app: app, relatedItems: []), moveWithAuthorization: { _ in
             XCTFail("An invalid filename must not trigger administrator authentication")
@@ -217,11 +226,69 @@ final class UninstallTests: XCTestCase {
         XCTAssertFalse(result.wasCancelled)
     }
 
+    func testDiscoversManyAppsConcurrentlyWithoutLosingAny() async throws {
+        var expected = Set<String>()
+        for index in 0..<24 {
+            let app = try makeApp(relativePath: "App\(index).app", bundleIdentifier: "dev.example.App\(index)")
+            expected.insert(app.resolvingSymlinksInPath().path)
+        }
+
+        let installed = await scanner.discover()
+        XCTAssertEqual(installed.count, expected.count)
+        XCTAssertEqual(Set(installed.map(\.id)), expected)
+        // Discovery order must be deterministic across runs.
+        let again = await scanner.discover()
+        XCTAssertEqual(installed.map(\.id), again.map(\.id))
+    }
+
+    func testFindsUninstallerBundledInsideContents() async throws {
+        let editor = try makeApp(relativePath: "Editor.app")
+        let bundled = editor.appendingPathComponent("Contents/Uninstall Editor.app", isDirectory: true)
+            .standardizedFileURL
+        try makeApp(at: bundled, bundleIdentifier: "dev.example.EditorUninstaller")
+
+        let installed = await scanner.discover()
+        XCTAssertEqual(installed.count, 1)
+        XCTAssertEqual(installed.first?.vendorUninstaller?.resolvingSymlinksInPath().path,
+                       bundled.resolvingSymlinksInPath().path)
+    }
+
+    func testIgnoresSymlinkedUninstallerInsideContents() async throws {
+        let editor = try makeApp(relativePath: "Editor.app")
+        let outside = root.appendingPathComponent("Outside/Uninstall Editor.app", isDirectory: true)
+            .standardizedFileURL
+        try makeApp(at: outside, bundleIdentifier: "dev.example.Outside")
+        try FileManager.default.createSymbolicLink(
+            at: editor.appendingPathComponent("Contents/Uninstall Editor.app"),
+            withDestinationURL: outside)
+
+        let discovered = await scanner.discover()
+        let app = try XCTUnwrap(discovered.first)
+        XCTAssertNil(app.vendorUninstaller)
+    }
+
+    func testFindsSiblingUninstallerNextToTheApp() async throws {
+        let editor = try makeApp(relativePath: "Editor.app")
+        let uninstaller = try makeApp(relativePath: "Uninstall Editor.app",
+                                      bundleIdentifier: "dev.example.Uninstaller")
+
+        let discovered = await scanner.discover()
+        let editorPath = editor.resolvingSymlinksInPath().path
+        let app = try XCTUnwrap(discovered.first { $0.url.resolvingSymlinksInPath().path == editorPath })
+        XCTAssertEqual(app.vendorUninstaller?.resolvingSymlinksInPath().path,
+                       uninstaller.resolvingSymlinksInPath().path)
+    }
+
     @discardableResult
-    private func makeApp(relativePath: String) throws -> URL {
-        let app = apps.appendingPathComponent(relativePath, isDirectory: true).standardizedFileURL
+    private func makeApp(relativePath: String, bundleIdentifier: String? = nil) throws -> URL {
+        try makeApp(at: apps.appendingPathComponent(relativePath, isDirectory: true).standardizedFileURL,
+                    bundleIdentifier: bundleIdentifier ?? identifier)
+    }
+
+    @discardableResult
+    private func makeApp(at app: URL, bundleIdentifier: String) throws -> URL {
         let plist = app.appendingPathComponent("Contents/Info.plist")
-        let info = ["CFBundleIdentifier": identifier, "CFBundlePackageType": "APPL"]
+        let info = ["CFBundleIdentifier": bundleIdentifier, "CFBundlePackageType": "APPL"]
         let data = try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0)
         try makeFile(at: plist, data: data)
         return app

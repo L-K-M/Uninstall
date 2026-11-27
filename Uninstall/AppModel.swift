@@ -37,6 +37,7 @@ final class AppModel {
 
     @ObservationIgnored private let scanner = AppScanner.standard
     @ObservationIgnored private var scanTask: Task<Void, Never>?
+    @ObservationIgnored private var scanToken = UUID()
     @ObservationIgnored private var didStart = false
     @ObservationIgnored private var includeContainers = false
     @ObservationIgnored private var observedLaunches = UserDefaults.standard.object(forKey: "observedLaunches") as? [String: Double] ?? [:]
@@ -53,17 +54,21 @@ final class AppModel {
         guard removingName == nil, pendingPlan == nil else { return }
         if let includingContainers { includeContainers = includingContainers }
         scanTask?.cancel()
+        let token = UUID()
+        scanToken = token
         isScanning = true
         completedScans = 0
+        status = nil
         refreshRunningApps()
         let scanner = scanner
         let includeContainers = includeContainers
 
         scanTask = Task {
-            let apps = await withTaskGroup(of: [InstalledApp].self) { group in
-                group.addTask { scanner.discover() }
-                return await group.next() ?? []
-            }
+            // Only the current scan may clear the flag, so a cancelled scan cannot
+            // leave isScanning stuck on true.
+            defer { if self.scanToken == token { self.isScanning = false } }
+
+            let apps = await scanner.discover()
             guard !Task.isCancelled else { return }
 
             let counts = apps.reduce(into: [String: Int]()) { counts, app in
@@ -76,17 +81,21 @@ final class AppModel {
                 return AppRow(app: app, observedLaunch: observedLaunch(for: app), hasOtherInstallations: copies > 1)
             }
             refreshRunningApps()
+            pruneObservedLaunches()
             if !rows.contains(where: { $0.id == selection }) {
                 selection = nil
             }
 
+            let concurrency = max(4, min(8, ProcessInfo.processInfo.activeProcessorCount))
             await withTaskGroup(of: (Int, AppFootprint).self) { group in
-                var remaining = apps.enumerated().makeIterator()
-                for _ in 0..<min(3, apps.count) {
-                    if let (index, app) = remaining.next() {
-                        group.addTask { (index, scanner.measure(app, includingContainers: includeContainers)) }
-                    }
+                var next = 0
+                func enqueueNext() {
+                    guard next < apps.count else { return }
+                    let index = next
+                    next += 1
+                    group.addTask { (index, scanner.measure(apps[index], includingContainers: includeContainers)) }
                 }
+                for _ in 0..<min(concurrency, apps.count) { enqueueNext() }
 
                 for await (index, footprint) in group {
                     guard !Task.isCancelled else {
@@ -95,15 +104,20 @@ final class AppModel {
                     }
                     rows[index].footprint = footprint
                     completedScans += 1
-                    if let (index, app) = remaining.next() {
-                        group.addTask { (index, scanner.measure(app, includingContainers: includeContainers)) }
-                    }
+                    enqueueNext()
                 }
             }
-
-            guard !Task.isCancelled else { return }
-            isScanning = false
         }
+    }
+
+    /// Drops launch records for paths that are no longer installed apps or running,
+    /// so the persisted dictionary does not grow without bound.
+    private func pruneObservedLaunches() {
+        let known = Set(rows.map(\.id)).union(runningPaths)
+        let pruned = observedLaunches.filter { known.contains($0.key) }
+        guard pruned.count != observedLaunches.count else { return }
+        observedLaunches = pruned
+        UserDefaults.standard.set(observedLaunches, forKey: "observedLaunches")
     }
 
     func refreshRunningApps() {
@@ -155,9 +169,13 @@ final class AppModel {
         pendingPlan = nil
 
         let app = plan.app
+        let bundlePrefix = app.id + "/"
         let activeApps = NSWorkspace.shared.runningApplications
         let isInUse = activeApps.contains { active in
-            if active.bundleURL?.resolvingSymlinksInPath().path == app.id { return true }
+            if let path = active.bundleURL?.resolvingSymlinksInPath().path {
+                // The app itself, or a helper/XPC service running from inside its bundle.
+                if path == app.id || path.hasPrefix(bundlePrefix) { return true }
+            }
             guard let identifier = app.bundleIdentifier else { return false }
             return active.bundleIdentifier?.caseInsensitiveCompare(identifier) == .orderedSame
                 && (active.bundleURL == nil || !plan.relatedItems.isEmpty)
@@ -172,6 +190,7 @@ final class AppModel {
         removingName = app.name
         status = nil
         scanTask?.cancel()
+        scanToken = UUID()
         isScanning = false
 
         Task {
