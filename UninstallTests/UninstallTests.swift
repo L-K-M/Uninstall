@@ -115,6 +115,54 @@ final class UninstallTests: XCTestCase {
         XCTAssertEqual(footprint.totalBytes, footprint.bundle.bytes)
     }
 
+    func testMeasuresExactMatchAdditionalLeftoverLocations() throws {
+        try makeApp(relativePath: "Editor.app")
+        let app = try XCTUnwrap(scanner.discover().first)
+
+        let locations: [(path: String, category: RelatedCategory, directory: Bool)] = [
+            ("LaunchAgents/\(identifier).plist", .launchAgent, false),
+            ("Preferences/\(identifier)", .preferences, true),
+            ("Application Scripts/\(identifier).plist", .scripts, false),
+            ("PreferencePanes/\(identifier).prefPane", .preferencePane, true),
+            ("Internet Plug-Ins/\(identifier).plugin", .plugin, true),
+            ("QuickLook/\(identifier).qlgenerator", .quickLook, true),
+        ]
+        for location in locations {
+            let url = library.appendingPathComponent(location.path)
+            if location.directory {
+                try makeFile(at: url.appendingPathComponent("Contents/Info.plist"))
+            } else {
+                try makeFile(at: url)
+            }
+        }
+
+        // Similarly named neighbours must not be treated as leftovers.
+        try makeFile(at: library.appendingPathComponent("LaunchAgents/\(identifier)Extra.plist"))
+        try makeFile(at: library.appendingPathComponent("PreferencePanes/\(identifier)Other.prefPane/Contents/Info.plist"))
+
+        let footprint = scanner.measure(app)
+        XCTAssertEqual(footprint.relatedItems.count, locations.count)
+        let byPath = Dictionary(uniqueKeysWithValues: footprint.relatedItems.map { ($0.url.path, $0.category) })
+        for location in locations {
+            let url = library.appendingPathComponent(location.path)
+            XCTAssertEqual(byPath[url.path], location.category, "missing \(location.path)")
+        }
+        XCTAssertNil(byPath[library.appendingPathComponent("LaunchAgents/\(identifier)Extra.plist").path])
+        XCTAssertNil(byPath[library.appendingPathComponent("PreferencePanes/\(identifier)Other.prefPane").path])
+    }
+
+    func testHardLinkedRelatedFilesCountOnceTowardTotal() throws {
+        try makeApp(relativePath: "Editor.app")
+        let cacheData = library.appendingPathComponent("Caches/\(identifier)/data")
+        try makeFile(at: cacheData)
+        let support = library.appendingPathComponent("Application Support/\(identifier)", isDirectory: true)
+        try FileManager.default.createDirectory(at: support, withIntermediateDirectories: true)
+        try FileManager.default.linkItem(at: cacheData, to: support.appendingPathComponent("shared"))
+
+        let footprint = scanner.measure(try XCTUnwrap(scanner.discover().first))
+        XCTAssertEqual(footprint.relatedBytes, try allocatedBytes(cacheData))
+    }
+
     func testStaleRelatedFileAbortsBeforeTheAppIsMoved() throws {
         try makeApp(relativePath: "Editor.app")
         let preferences = library.appendingPathComponent("Preferences/\(identifier).plist")

@@ -43,6 +43,10 @@ enum RelatedCategory: String, Sendable {
     case webData = "Website Data"
     case scripts = "Application Scripts"
     case container = "App Container"
+    case launchAgent = "Launch Agent"
+    case preferencePane = "Preference Pane"
+    case plugin = "Plugin"
+    case quickLook = "Quick Look"
 
     var selectedByDefault: Bool {
         self == .cache || self == .logs
@@ -56,6 +60,10 @@ enum RelatedCategory: String, Sendable {
             "Resets stored preferences."
         case .webData:
             "May include sign-in data."
+        case .launchAgent:
+            "Stops the app's background helper from launching."
+        case .preferencePane:
+            "Removes the pane from System Settings."
         default:
             nil
         }
@@ -146,6 +154,7 @@ struct AppScanner: Sendable {
             ("Caches/\(identifier)", .cache),
             ("Logs/\(identifier)", .logs),
             ("Preferences/\(identifier).plist", .preferences),
+            ("Preferences/\(identifier)", .preferences),
             ("Application Support/\(identifier)", .support),
             ("Saved Application State/\(identifier).savedState", .savedState),
             ("HTTPStorages/\(identifier)", .webData),
@@ -153,7 +162,12 @@ struct AppScanner: Sendable {
             ("Cookies/\(identifier).binarycookies", .webData),
             ("WebKit/\(identifier)", .webData),
             ("Application Scripts/\(identifier)", .scripts),
+            ("Application Scripts/\(identifier).plist", .scripts),
             ("Containers/\(identifier)", .container),
+            ("LaunchAgents/\(identifier).plist", .launchAgent),
+            ("PreferencePanes/\(identifier).prefPane", .preferencePane),
+            ("Internet Plug-Ins/\(identifier).plugin", .plugin),
+            ("QuickLook/\(identifier).qlgenerator", .quickLook),
         ]
 
         let byHost = libraryDirectory.appendingPathComponent("Preferences/ByHost", isDirectory: true)
