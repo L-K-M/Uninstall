@@ -217,6 +217,24 @@ final class UninstallTests: XCTestCase {
         XCTAssertFalse(result.wasCancelled)
     }
 
+    func testReclaimableUsageSumsBundleAndSelectedRelatedItems() {
+        let bundle = DiskUsage(bytes: 1_000, isComplete: true)
+        let cache = RelatedItem(url: URL(fileURLWithPath: "/tmp/cache"),
+                                category: .cache, identity: nil,
+                                usage: DiskUsage(bytes: 250, isComplete: true))
+        let logs = RelatedItem(url: URL(fileURLWithPath: "/tmp/logs"),
+                               category: .logs, identity: nil,
+                               usage: DiskUsage(bytes: 50, isComplete: false))
+
+        let complete = RemovalPlan.usage(bundle: bundle, related: [cache])
+        XCTAssertEqual(complete.bytes, 1_250)
+        XCTAssertTrue(complete.isComplete)
+
+        let partial = RemovalPlan.usage(bundle: bundle, related: [cache, logs])
+        XCTAssertEqual(partial.bytes, 1_300)
+        XCTAssertFalse(partial.isComplete)
+    }
+
     @discardableResult
     private func makeApp(relativePath: String) throws -> URL {
         let app = apps.appendingPathComponent(relativePath, isDirectory: true).standardizedFileURL

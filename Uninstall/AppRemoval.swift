@@ -4,6 +4,23 @@ struct RemovalPlan: Identifiable, Sendable {
     let id = UUID()
     let app: InstalledApp
     let relatedItems: [RelatedItem]
+    let appUsage: DiskUsage
+    let reclaimableUsage: DiskUsage
+
+    init(app: InstalledApp, relatedItems: [RelatedItem],
+         appUsage: DiskUsage = .unavailable,
+         reclaimableUsage: DiskUsage = .unavailable) {
+        self.app = app
+        self.relatedItems = relatedItems
+        self.appUsage = appUsage
+        self.reclaimableUsage = reclaimableUsage
+    }
+
+    static func usage(bundle: DiskUsage, related items: [RelatedItem]) -> DiskUsage {
+        let relatedBytes = items.reduce(into: Int64(0)) { $0 += $1.usage.bytes }
+        return DiskUsage(bytes: bundle.bytes + relatedBytes,
+                         isComplete: bundle.isComplete && items.allSatisfy(\.usage.isComplete))
+    }
 }
 
 struct RemovalResult: Sendable {

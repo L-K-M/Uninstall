@@ -144,10 +144,16 @@ final class AppModel {
 
     func prepareRemoval(for row: AppRow, relatedIDs: Set<String>) {
         guard !row.app.isProtected, removingName == nil, !isRunning(row.app) else { return }
+        let bundle = row.footprint?.bundle ?? .unavailable
         let related = row.hasOtherInstallations ? [] : (row.footprint?.relatedItems ?? []).filter {
             relatedIDs.contains($0.id) && $0.canRemove
         }
-        pendingPlan = RemovalPlan(app: row.app, relatedItems: related)
+        pendingPlan = RemovalPlan(
+            app: row.app,
+            relatedItems: related,
+            appUsage: bundle,
+            reclaimableUsage: RemovalPlan.usage(bundle: bundle, related: related)
+        )
     }
 
     func confirmRemoval(_ plan: RemovalPlan) {
@@ -187,11 +193,24 @@ final class AppModel {
                 }
                 if !result.moved.isEmpty {
                     let count = result.moved.count - 1
-                    status = switch count {
+                    let moved = Set(result.moved)
+                    var freedBytes: Int64 = 0
+                    var freedIsComplete = true
+                    if moved.contains(app.url) {
+                        freedBytes += plan.appUsage.bytes
+                        freedIsComplete = freedIsComplete && plan.appUsage.isComplete
+                    }
+                    for item in plan.relatedItems where moved.contains(item.url) {
+                        freedBytes += item.usage.bytes
+                        freedIsComplete = freedIsComplete && item.usage.isComplete
+                    }
+                    let freed = ByteCountFormatter.string(fromByteCount: freedBytes, countStyle: .file)
+                    let base = switch count {
                     case 0: "Moved \(app.name) to Trash."
                     case 1: "Moved \(app.name) and 1 related item to Trash."
                     default: "Moved \(app.name) and \(count) related items to Trash."
                     }
+                    status = "\(base) Freed \(freedIsComplete ? "" : "at least ")\(freed)."
                 } else if result.wasCancelled {
                     status = "Removal canceled."
                 }
