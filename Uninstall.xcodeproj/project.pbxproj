@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AA00000000000000000000A2 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA00000000000000000000A1 /* Assets.xcassets */; };
 		02E0E92CAECAFF739F0D356A /* UninstallApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 379F339D3CDFEAAADAD71E38 /* UninstallApp.swift */; };
 		0A733029CB4355D77CC66627 /* AppRemoval.swift in Sources */ = {isa = PBXBuildFile; fileRef = 041343E1ACDE47F30DCC22C2 /* AppRemoval.swift */; };
 		0FE847E82BB1A4521BAFE139 /* AdministratorTrash.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC019E86CA33C2E8BD392D08 /* AdministratorTrash.swift */; };
@@ -27,6 +28,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		AA00000000000000000000A1 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		041343E1ACDE47F30DCC22C2 /* AppRemoval.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRemoval.swift; sourceTree = "<group>"; };
 		325484ED983CFBBE4F326A07 /* UninstallTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = UninstallTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		379F339D3CDFEAAADAD71E38 /* UninstallApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UninstallApp.swift; sourceTree = "<group>"; };
@@ -68,6 +70,7 @@
 		110A58265AA7EDB12EB9E98A /* Uninstall */ = {
 			isa = PBXGroup;
 			children = (
+				AA00000000000000000000A1 /* Assets.xcassets */,
 				FC019E86CA33C2E8BD392D08 /* AdministratorTrash.swift */,
 				A4171FCEA0D1D777BE46F41D /* AppModel.swift */,
 				041343E1ACDE47F30DCC22C2 /* AppRemoval.swift */,
@@ -103,6 +106,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 7C41A5482F4A155CDABAF86F /* Build configuration list for PBXNativeTarget "Uninstall" */;
 			buildPhases = (
+				AA00000000000000000000A3 /* Resources */,
 				6B3848F2E1227FEA8D9C2F87 /* Sources */,
 			);
 			buildRules = (
@@ -152,6 +156,17 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		AA00000000000000000000A3 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA00000000000000000000A2 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		1E4FF586214ED5EE23133C18 /* Sources */ = {
