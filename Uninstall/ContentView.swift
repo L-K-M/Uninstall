@@ -164,6 +164,13 @@ struct ContentView: View {
             if let removing = model.removingName {
                 ProgressView().controlSize(.small)
                 Text("Moving \(removing) to Trash…")
+            } else if let removed = model.lastRemovalName {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                    .accessibilityHidden(true)
+                Text(model.status ?? "Moved \(removed) to Trash.")
+                Button("Open Trash") { openTrash() }
+                    .controlSize(.small)
             } else if model.isScanning {
                 if model.rows.isEmpty {
                     Text("Finding apps…")
@@ -253,7 +260,19 @@ struct ContentView: View {
     private func relatedFiles(for row: AppRow, footprint: AppFootprint) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Divider()
-            Text("Related Files").font(.headline)
+            HStack {
+                Text("Related Files").font(.headline)
+                Spacer()
+                let removable = footprint.relatedItems.filter(\.canRemove)
+                if !removable.isEmpty && !row.hasOtherInstallations && !row.app.isProtected {
+                    Button("Select All") { setAllFiles(true, for: row) }
+                        .controlSize(.small)
+                        .disabled(model.removingName != nil)
+                    Button("Select None") { setAllFiles(false, for: row) }
+                        .controlSize(.small)
+                        .disabled(model.removingName != nil || checkedFiles(for: row).isEmpty)
+                }
+            }
             if row.hasOtherInstallations {
                 Text("Another installed copy uses the same bundle ID. Its related files are shared.")
                     .font(.caption).foregroundStyle(.secondary)
@@ -290,6 +309,7 @@ struct ContentView: View {
     private func controls(for row: AppRow) -> some View {
         let disabled = row.app.isProtected || model.isRunning(row.app) || model.removingName != nil
         let selected = checkedFiles(for: row)
+        let removable = (row.footprint?.relatedItems ?? []).filter(\.canRemove)
 
         return VStack(alignment: .leading, spacing: 8) {
             if row.app.isProtected {
@@ -306,18 +326,41 @@ struct ContentView: View {
                         .disabled(model.removingName != nil)
                 }
                 Spacer(minLength: 0)
-                Menu {
-                    Button("Remove App Only") { model.prepareRemoval(for: row, relatedIDs: []) }
+                if !removable.isEmpty && !selected.isEmpty {
+                    Button("App Only") { model.prepareRemoval(for: row, relatedIDs: []) }
                         .disabled(disabled)
-                    Button("Remove App and Selected Files") { model.prepareRemoval(for: row, relatedIDs: selected) }
-                        .disabled(disabled || selected.isEmpty || row.hasOtherInstallations)
-                } label: {
-                    Label("Remove…", systemImage: "trash")
+                        .help("Move only the app bundle to the Trash.")
                 }
-                .fixedSize()
+                Button {
+                    model.prepareRemoval(for: row, relatedIDs: selected)
+                } label: {
+                    Label(selected.isEmpty ? "Move to Trash" : "Move to Trash (\(selected.count))",
+                          systemImage: "trash")
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.red)
                 .disabled(disabled)
+                .help("Review what will move to the Trash before confirming.")
+            }
+            if !selected.isEmpty, let footprint = row.footprint {
+                Text("About \(diskSize(selectedBytes(for: row, footprint: footprint))) will move to the Trash.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
             }
         }
+    }
+
+    private func selectedBytes(for row: AppRow, footprint: AppFootprint) -> Int64 {
+        let ids = checkedFiles(for: row)
+        return footprint.bundle.bytes
+            + footprint.relatedItems.filter { ids.contains($0.id) }.reduce(0) { $0 + $1.usage.bytes }
+    }
+
+    private func setAllFiles(_ checked: Bool, for row: AppRow) {
+        guard !row.hasOtherInstallations, !row.app.isProtected else { return }
+        let ids = (row.footprint?.relatedItems ?? []).filter(\.canRemove).map(\.id)
+        checkedByApp[row.id] = checked ? Set(ids) : []
     }
 
     private func checkedFiles(for row: AppRow) -> Set<String> {
@@ -341,7 +384,19 @@ struct ContentView: View {
 
     private func scan(includingContainers: Bool) {
         checkedByApp = [:]
+        model.clearRemovalBanner()
         model.refresh(includingContainers: includingContainers)
+    }
+
+    private func openTrash() {
+        let home = URL(fileURLWithPath: NSHomeDirectory())
+        do {
+            let trash = try FileManager.default.url(for: .trashDirectory, in: .userDomainMask,
+                                                    appropriateFor: home, create: false)
+            NSWorkspace.shared.open(trash)
+        } catch {
+            // The Trash location is unavailable; leave the banner without an action.
+        }
     }
 
     private func compare(_ left: AppRow, _ right: AppRow) -> Bool {
@@ -382,8 +437,22 @@ private struct RemovalReview: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Move \(plan.app.name) to Trash?").font(.title2.weight(.semibold))
-            Text("The items below will move to the Trash.")
+            HStack(alignment: .center, spacing: 12) {
+                AppIcon(url: plan.app.url, size: 40)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Move \(plan.app.name) to Trash?")
+                        .font(.title2.weight(.semibold))
+                        .lineLimit(2)
+                    Text(plan.isEstimateComplete
+                         ? "\(plan.itemCount) items · about \(diskSize(plan.estimatedBytes))"
+                         : "\(plan.itemCount) items · at least \(diskSize(plan.estimatedBytes))")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+            }
+            Text("These items move to the Trash. Space becomes available after you empty it.")
+                .font(.caption)
                 .foregroundStyle(.secondary)
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
@@ -407,7 +476,7 @@ private struct RemovalReview: View {
             }
         }
         .padding(22)
-        .frame(width: 490)
+        .frame(width: 520)
         .fixedSize(horizontal: false, vertical: true)
     }
 

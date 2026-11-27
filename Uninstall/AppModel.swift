@@ -29,6 +29,7 @@ final class AppModel {
     private(set) var isScanning = false
     private(set) var completedScans = 0
     private(set) var removingName: String?
+    private(set) var lastRemovalName: String?
     private(set) var runningPaths: Set<String> = []
     private(set) var status: String?
     var selection: String?
@@ -144,10 +145,12 @@ final class AppModel {
 
     func prepareRemoval(for row: AppRow, relatedIDs: Set<String>) {
         guard !row.app.isProtected, removingName == nil, !isRunning(row.app) else { return }
+        lastRemovalName = nil
         let related = row.hasOtherInstallations ? [] : (row.footprint?.relatedItems ?? []).filter {
             relatedIDs.contains($0.id) && $0.canRemove
         }
-        pendingPlan = RemovalPlan(app: row.app, relatedItems: related)
+        pendingPlan = RemovalPlan(app: row.app, relatedItems: related,
+                                  bundleUsage: row.footprint?.bundle ?? .unavailable)
     }
 
     func confirmRemoval(_ plan: RemovalPlan) {
@@ -171,6 +174,7 @@ final class AppModel {
 
         removingName = app.name
         status = nil
+        lastRemovalName = nil
         scanTask?.cancel()
         isScanning = false
 
@@ -187,6 +191,7 @@ final class AppModel {
                 }
                 if !result.moved.isEmpty {
                     let count = result.moved.count - 1
+                    lastRemovalName = app.name
                     status = switch count {
                     case 0: "Moved \(app.name) to Trash."
                     case 1: "Moved \(app.name) and 1 related item to Trash."
@@ -205,5 +210,10 @@ final class AppModel {
         if !NSWorkspace.shared.open(url) {
             notice = RemovalNotice(title: "Couldn’t open the uninstaller", message: url.path)
         }
+    }
+
+    func clearRemovalBanner() {
+        lastRemovalName = nil
+        status = nil
     }
 }
