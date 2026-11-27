@@ -157,6 +157,21 @@ final class UninstallTests: XCTestCase {
         XCTAssertTrue(try XCTUnwrap(result.problems.first).contains("/Logs/"))
     }
 
+    func testRemovalPlanSelectedUsageCombinesOnlySelectedItems() throws {
+        try makeApp(relativePath: "Editor.app")
+        for path in ["Caches/\(identifier)/data", "Logs/\(identifier)/data", "Preferences/\(identifier).plist"] {
+            try makeFile(at: library.appendingPathComponent(path))
+        }
+        let app = try XCTUnwrap(scanner.discover().first)
+        let footprint = scanner.measure(app)
+        let selected = footprint.relatedItems.filter { $0.category != .preferences }
+
+        let plan = RemovalPlan(app: app, relatedItems: selected, bundleUsage: footprint.bundle)
+
+        XCTAssertEqual(plan.selectedUsage?.bytes, footprint.bundle.bytes + selected.reduce(0) { $0 + $1.usage.bytes })
+        XCTAssertEqual(plan.selectedUsage?.isComplete, footprint.isComplete)
+    }
+
     func testPermissionDeniedRetriesTheAppWithAuthorization() throws {
         try makeApp(relativePath: "Editor.app")
         try makeFile(at: library.appendingPathComponent("Caches/\(identifier)"))
