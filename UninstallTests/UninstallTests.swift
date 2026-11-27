@@ -217,6 +217,31 @@ final class UninstallTests: XCTestCase {
         XCTAssertFalse(result.wasCancelled)
     }
 
+    func testAppFilterMatchesRowsByState() throws {
+        try makeApp(relativePath: "Editor.app")
+        try makeFile(at: library.appendingPathComponent("Caches/\(identifier)/data"))
+        let app = try XCTUnwrap(scanner.discover().first)
+        var row = AppRow(app: app)
+
+        XCTAssertTrue(AppModel.row(row, matches: .all, isRunning: false))
+        XCTAssertTrue(AppModel.row(row, matches: .removable, isRunning: false))
+        XCTAssertFalse(AppModel.row(row, matches: .protectedApps, isRunning: false))
+        XCTAssertTrue(AppModel.row(row, matches: .running, isRunning: true))
+        XCTAssertFalse(AppModel.row(row, matches: .running, isRunning: false))
+        XCTAssertFalse(AppModel.row(row, matches: .relatedFiles, isRunning: false))
+
+        row.footprint = scanner.measure(app)
+        XCTAssertTrue(AppModel.row(row, matches: .relatedFiles, isRunning: false))
+
+        let protected = InstalledApp(id: app.id, url: app.url, name: app.name,
+                                     bundleIdentifier: app.bundleIdentifier, identity: app.identity,
+                                     lastOpened: app.lastOpened, isProtected: true,
+                                     vendorUninstaller: nil)
+        let protectedRow = AppRow(app: protected)
+        XCTAssertTrue(AppModel.row(protectedRow, matches: .protectedApps, isRunning: false))
+        XCTAssertFalse(AppModel.row(protectedRow, matches: .removable, isRunning: false))
+    }
+
     @discardableResult
     private func makeApp(relativePath: String) throws -> URL {
         let app = apps.appendingPathComponent(relativePath, isDirectory: true).standardizedFileURL

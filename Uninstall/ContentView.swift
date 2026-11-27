@@ -20,12 +20,16 @@ struct ContentView: View {
     @State private var search = ""
     @State private var sortOrder = [KeyPathComparator(\AppRow.totalSortValue, order: .reverse)]
     @State private var checkedByApp: [String: Set<String>] = [:]
+    @State private var filter: AppFilter = .all
 
     private var visibleRows: [AppRow] {
         let term = search.trimmingCharacters(in: .whitespacesAndNewlines)
         return model.rows.filter {
-            term.isEmpty || $0.name.localizedStandardContains(term)
+            let matchesSearch = term.isEmpty
+                || $0.name.localizedStandardContains(term)
                 || $0.app.bundleIdentifier?.localizedStandardContains(term) == true
+                || displayedPath($0.app.url).localizedStandardContains(term)
+            return matchesSearch && AppModel.row($0, matches: filter, isRunning: model.isRunning($0.app))
         }
         .sorted(by: compare)
     }
@@ -77,6 +81,26 @@ struct ContentView: View {
             }
 
             ToolbarItem(placement: .automatic) {
+                Menu {
+                    ForEach(AppFilter.allCases) { option in
+                        Button {
+                            filter = option
+                        } label: {
+                            HStack {
+                                Text(option.title)
+                                Spacer()
+                                if filter == option {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    }
+                } label: {
+                    Label("Filter Apps", systemImage: "line.3.horizontal.decrease.circle")
+                }
+            }
+
+            ToolbarItem(placement: .automatic) {
                 TextField("Search apps", text: $search)
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 180)
@@ -118,6 +142,13 @@ struct ContentView: View {
                 HStack(spacing: 8) {
                     AppIcon(url: row.app.url, size: 24)
                     Text(row.name).lineLimit(1)
+                    if model.isRunning(row.app) {
+                        Circle()
+                            .fill(Color.green)
+                            .frame(width: 6, height: 6)
+                            .help("Running")
+                            .accessibilityLabel("\(row.name) is running")
+                    }
                 }
                 .padding(.vertical, 2)
             }
@@ -202,6 +233,14 @@ struct ContentView: View {
                                 .foregroundStyle(.secondary)
                                 .textSelection(.enabled)
                         }
+                        Spacer()
+                        Button {
+                            NSWorkspace.shared.activateFileViewerSelecting([row.app.url])
+                        } label: {
+                            Image(systemName: "folder")
+                        }
+                        .buttonStyle(.borderless)
+                        .help("Reveal in Finder")
                     }
                     if let footprint = row.footprint {
                         storage(for: footprint)
