@@ -102,6 +102,19 @@ final class UninstallTests: XCTestCase {
         XCTAssertEqual(full.relatedBytes, try allocatedBytes(containerFile))
     }
 
+    @MainActor
+    func testMeasurementOrderStartsAtTheSelectedApp() {
+        XCTAssertEqual(AppModel.measurementOrder(count: 5, preferring: 3), [3, 0, 1, 2, 4])
+        XCTAssertEqual(AppModel.measurementOrder(count: 1, preferring: 0), [0])
+    }
+
+    @MainActor
+    func testMeasurementOrderWithoutSelectionKeepsDiscoveryOrder() {
+        XCTAssertEqual(AppModel.measurementOrder(count: 4, preferring: nil), [0, 1, 2, 3])
+        XCTAssertEqual(AppModel.measurementOrder(count: 0, preferring: 2), [])
+        XCTAssertEqual(AppModel.measurementOrder(count: 3, preferring: 9), [0, 1, 2])
+    }
+
     func testProtectedAppsAreMeasuredWithoutOpeningRelatedFiles() throws {
         try makeApp(relativePath: "Editor.app")
         try makeFile(at: library.appendingPathComponent("Caches/\(identifier)/data"))

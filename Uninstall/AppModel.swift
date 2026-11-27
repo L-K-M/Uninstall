@@ -25,6 +25,10 @@ struct RemovalNotice: Identifiable {
 
 @MainActor @Observable
 final class AppModel {
+    /// Number of bundles measured at once. Three was conservative for
+    /// spinning disks; modern Macs handle a few more without contention.
+    static let measurementConcurrency = 4
+
     private(set) var rows: [AppRow] = []
     private(set) var isScanning = false
     private(set) var completedScans = 0
@@ -81,9 +85,13 @@ final class AppModel {
             }
 
             await withTaskGroup(of: (Int, AppFootprint).self) { group in
-                var remaining = apps.enumerated().makeIterator()
-                for _ in 0..<min(3, apps.count) {
-                    if let (index, app) = remaining.next() {
+                var remaining = Self.measurementOrder(
+                    count: apps.count,
+                    preferring: selection.flatMap { id in apps.firstIndex { $0.id == id } }
+                ).makeIterator()
+                for _ in 0..<min(Self.measurementConcurrency, apps.count) {
+                    if let index = remaining.next() {
+                        let app = apps[index]
                         group.addTask { (index, scanner.measure(app, includingContainers: includeContainers)) }
                     }
                 }
@@ -95,7 +103,8 @@ final class AppModel {
                     }
                     rows[index].footprint = footprint
                     completedScans += 1
-                    if let (index, app) = remaining.next() {
+                    if let index = remaining.next() {
+                        let app = apps[index]
                         group.addTask { (index, scanner.measure(app, includingContainers: includeContainers)) }
                     }
                 }
@@ -104,6 +113,15 @@ final class AppModel {
             guard !Task.isCancelled else { return }
             isScanning = false
         }
+
+    }
+
+    /// Measurement order that keeps discovery order but starts with the
+    /// selected app, so its detail pane is populated without waiting behind
+    /// larger bundles.
+    static func measurementOrder(count: Int, preferring index: Int?) -> [Int] {
+        guard let index, (0..<count).contains(index) else { return Array(0..<count) }
+        return [index] + (0..<count).filter { $0 != index }
     }
 
     func refreshRunningApps() {
