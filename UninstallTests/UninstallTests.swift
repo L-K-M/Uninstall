@@ -20,6 +20,15 @@ final class UninstallTests: XCTestCase {
         try FileManager.default.removeItem(at: root)
     }
 
+    @MainActor
+    func testAppModelDoesNotScanHostWhenRunningTests() {
+        let model = AppModel()
+        model.start()
+
+        XCTAssertFalse(model.isScanning)
+        XCTAssertTrue(model.rows.isEmpty)
+    }
+
     func testDiscoversAppsInFoldersWithoutFollowingSymlinksOrEmbeddedApps() throws {
         let editor = try makeApp(relativePath: "Vendor/Editor.app")
         try makeApp(relativePath: "Vendor/Editor.app/Contents/Helpers/Embedded.app")

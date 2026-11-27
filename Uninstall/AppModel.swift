@@ -46,6 +46,7 @@ final class AppModel {
     func start() {
         guard !didStart else { return }
         didStart = true
+        guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
         refresh()
     }
 
