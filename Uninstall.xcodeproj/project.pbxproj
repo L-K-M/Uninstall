@@ -14,6 +14,7 @@
 		5CCC4128F4505216EABA9FBB /* UninstallTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE5C90C6D15D190D560E9A57 /* UninstallTests.swift */; };
 		7B51B10174A0255297119BE6 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB3E0248A76CC1BDEAEF34CD /* ContentView.swift */; };
 		893123AD4D84273C7C546005 /* AppScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C72D0733EA128F70B54DD8D /* AppScanner.swift */; };
+		AA01000000A1 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA01000000A2 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -36,6 +37,7 @@
 		DE5C90C6D15D190D560E9A57 /* UninstallTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UninstallTests.swift; sourceTree = "<group>"; };
 		FB3E0248A76CC1BDEAEF34CD /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		FC019E86CA33C2E8BD392D08 /* AdministratorTrash.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdministratorTrash.swift; sourceTree = "<group>"; };
+		AA01000000A2 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -68,6 +70,7 @@
 		110A58265AA7EDB12EB9E98A /* Uninstall */ = {
 			isa = PBXGroup;
 			children = (
+				AA01000000A2 /* Assets.xcassets */,
 				FC019E86CA33C2E8BD392D08 /* AdministratorTrash.swift */,
 				A4171FCEA0D1D777BE46F41D /* AppModel.swift */,
 				041343E1ACDE47F30DCC22C2 /* AppRemoval.swift */,
@@ -103,6 +106,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 7C41A5482F4A155CDABAF86F /* Build configuration list for PBXNativeTarget "Uninstall" */;
 			buildPhases = (
+				AA01000000A3 /* Resources */,
 				6B3848F2E1227FEA8D9C2F87 /* Sources */,
 			);
 			buildRules = (
@@ -152,6 +156,17 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		AA01000000A3 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA01000000A1 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		1E4FF586214ED5EE23133C18 /* Sources */ = {
