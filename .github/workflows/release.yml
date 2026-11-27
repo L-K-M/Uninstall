@@ -1,0 +1,137 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  PROJECT: Uninstall.xcodeproj
+  SCHEME: Uninstall
+  APP_NAME: Uninstall
+
+jobs:
+  release:
+    name: Build & publish (unsigned)
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
+        with:
+          xcode-version: '26.6'
+
+      - name: Install tooling
+        run: brew install xcbeautify create-dmg
+
+      - name: Version from tag
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
+      # A tag on a broken commit must not publish.
+      - name: Test
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
+            -destination 'platform=macOS' \
+            CODE_SIGN_IDENTITY=- | xcbeautify
+
+      - name: Build (Release, no Developer ID signing)
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project "$PROJECT" -scheme "$SCHEME" -configuration Release \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            -destination 'generic/platform=macOS' \
+            MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            CODE_SIGN_IDENTITY=- | xcbeautify
+
+      - name: Verify the universal app
+        run: |
+          APP="$RUNNER_TEMP/DerivedData/Build/Products/Release/Uninstall.app"
+          test -d "$APP" || { echo "::error::built Uninstall.app not found"; exit 1; }
+          /usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$APP/Contents/Info.plist" | grep -qx 'ch.lkmc.Uninstall'
+          /usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$APP/Contents/Info.plist" | grep -qx "$VERSION"
+          lipo -archs "$APP/Contents/MacOS/Uninstall" | grep -q 'x86_64'
+          lipo -archs "$APP/Contents/MacOS/Uninstall" | grep -q 'arm64'
+          echo "APP_PATH=$APP" >> "$GITHUB_ENV"
+
+      - name: Package zip + DMG
+        run: |
+          ZIP="$RUNNER_TEMP/$APP_NAME-v$VERSION-macos-universal.zip"
+          DMG="$RUNNER_TEMP/$APP_NAME-v$VERSION-macos-universal.dmg"
+          ditto -c -k --keepParent "$APP_PATH" "$ZIP"
+          create-dmg \
+            --volname "$APP_NAME" \
+            --hide-extension "$APP_NAME.app" \
+            --app-drop-link 0 0 \
+            "$DMG" "$APP_PATH" || test -f "$DMG"
+          echo "ZIP=$ZIP" >> "$GITHUB_ENV"
+          echo "DMG=$DMG" >> "$GITHUB_ENV"
+
+      # Uninstall currently bundles no third-party code. If a notices file is
+      # added later, it must reach every artifact before publication.
+      - name: Verify notices in the artifacts
+        run: |
+          if [ ! -f "Uninstall/Third-Party-Notices.txt" ]; then
+            echo "::notice::no Third-Party-Notices.txt committed — skip"
+            exit 0
+          fi
+          NOTICES="$APP_NAME.app/Contents/Resources/Third-Party-Notices.txt"
+          unzip -p "$ZIP" "$NOTICES" | grep . \
+            || { echo "::error::Third-Party-Notices.txt missing from $(basename "$ZIP")"; exit 1; }
+          MNT=$(mktemp -d)
+          hdiutil attach -nobrowse -readonly -mountpoint "$MNT" "$DMG" >/dev/null
+          found=$(find "$MNT" -maxdepth 4 -path "*/Contents/Resources/Third-Party-Notices.txt" -print -quit)
+          hdiutil detach "$MNT" >/dev/null
+          [ -n "$found" ] || { echo "::error::Third-Party-Notices.txt missing from $(basename "$DMG")"; exit 1; }
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
+        with:
+          name: ${{ env.APP_NAME }} ${{ env.VERSION }}
+          files: |
+            ${{ env.DMG }}
+            ${{ env.ZIP }}
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          make_latest: ${{ !contains(github.ref_name, '-') }}
+          generate_release_notes: true
+          body: |
+            ### Unsigned build
+
+            This app is **not** code-signed with a Developer ID or notarized, so macOS
+            Gatekeeper will warn on first launch. To open it:
+
+            - **Right-click** (or Control-click) the app → **Open** → **Open**, or
+            - run `xattr -dr com.apple.quarantine /Applications/${{ env.APP_NAME }}.app`
+
+      # Never trust an upload: download what GitHub actually serves for the tag
+      # and byte-compare it against what was just built.
+      - name: Verify published assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir "$RUNNER_TEMP/published"
+          gh release download "$GITHUB_REF_NAME" --dir "$RUNNER_TEMP/published" \
+            --pattern "$(basename "$ZIP")" --pattern "$(basename "$DMG")"
+          failed=0
+          for f in "$ZIP" "$DMG"; do
+            if ! cmp -- "$f" "$RUNNER_TEMP/published/$(basename "$f")"; then
+              gh release delete-asset "$GITHUB_REF_NAME" "$(basename "$f")" -y \
+                || echo "::warning::failed to remove mismatched asset $(basename "$f") — take it down manually"
+              echo "::error::published $(basename "$f") differed from the built artifact and was removed"
+              failed=1
+            fi
+          done
+          [ "$failed" -eq 0 ] || exit 1

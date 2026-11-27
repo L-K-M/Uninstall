@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Least privilege: the build/test jobs only need to read the repo.
+permissions:
+  contents: read
+
+# Cancel superseded PR runs, but never cancel an in-progress main push: a
+# permanently cancelled main commit masks breakage and breaks CI bisection.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  PROJECT: Uninstall.xcodeproj
+  SCHEME: Uninstall
+
+jobs:
+  scripts:
+    name: Shell scripts
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: shellcheck
+        run: shellcheck scripts/*.sh
+
+  build-test:
+    name: Build & Test
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
+        with:
+          xcode-version: '26.6'
+
+      - name: Install tooling
+        run: brew install xcbeautify
+
+      - name: Test
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
+            -destination 'platform=macOS' \
+            CODE_SIGN_IDENTITY=- | xcbeautify
+
+      - name: Build the app (Release)
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            -destination 'generic/platform=macOS' \
+            CODE_SIGN_IDENTITY=- | xcbeautify
+
+      - name: Verify release product
+        run: |
+          APP="$RUNNER_TEMP/DerivedData/Build/Products/Release/Uninstall.app"
+          test -d "$APP"
+          /usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$APP/Contents/Info.plist" | grep -qx 'ch.lkmc.Uninstall'
+          lipo -archs "$APP/Contents/MacOS/Uninstall" | grep -q 'x86_64'
+          lipo -archs "$APP/Contents/MacOS/Uninstall" | grep -q 'arm64'
