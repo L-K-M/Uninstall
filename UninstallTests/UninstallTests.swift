@@ -7,7 +7,7 @@ final class UninstallTests: XCTestCase {
     private var apps: URL { root.appendingPathComponent("Applications", isDirectory: true) }
     private var library: URL { root.appendingPathComponent("Library", isDirectory: true) }
     private var scanner: AppScanner { AppScanner(applicationDirectories: [apps], libraryDirectory: library) }
-    private let identifier = "dev.example.Editor"
+    private let identifier = "ch.lkmc.Uninstall.fixture"
 
     override func setUpWithError() throws {
         root = FileManager.default.temporaryDirectory.resolvingSymlinksInPath()
