@@ -206,4 +206,17 @@ final class AppModel {
             notice = RemovalNotice(title: "Couldn’t open the uninstaller", message: url.path)
         }
     }
+
+    func showTrash() {
+        guard let trash = try? FileManager.default.url(for: .trashDirectory, in: .userDomainMask,
+                                                       appropriateFor: nil, create: false) else {
+            notice = RemovalNotice(title: "Couldn’t open the Trash",
+                                   message: "The Trash location could not be found.")
+            return
+        }
+        if !NSWorkspace.shared.open(trash) {
+            notice = RemovalNotice(title: "Couldn’t open the Trash",
+                                   message: "Finder could not open \(trash.path).")
+        }
+    }
 }
