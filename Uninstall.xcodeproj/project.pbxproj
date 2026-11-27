@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		02E0E92CAECAFF739F0D356A /* UninstallApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 379F339D3CDFEAAADAD71E38 /* UninstallApp.swift */; };
+		A7C2000000000000000000A1 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A7C1000000000000000000A1 /* Assets.xcassets */; };
 		0A733029CB4355D77CC66627 /* AppRemoval.swift in Sources */ = {isa = PBXBuildFile; fileRef = 041343E1ACDE47F30DCC22C2 /* AppRemoval.swift */; };
 		0FE847E82BB1A4521BAFE139 /* AdministratorTrash.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC019E86CA33C2E8BD392D08 /* AdministratorTrash.swift */; };
 		4970B19541E828E7F2711B00 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4171FCEA0D1D777BE46F41D /* AppModel.swift */; };
@@ -28,6 +29,7 @@
 
 /* Begin PBXFileReference section */
 		041343E1ACDE47F30DCC22C2 /* AppRemoval.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRemoval.swift; sourceTree = "<group>"; };
+		A7C1000000000000000000A1 /* Assets.xcassets */ = {isa = PBXFileReference; explicitFileType = wrapper.assetcatalog; includeInIndex = 0; path = Assets.xcassets; sourceTree = "<group>"; };
 		325484ED983CFBBE4F326A07 /* UninstallTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = UninstallTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		379F339D3CDFEAAADAD71E38 /* UninstallApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UninstallApp.swift; sourceTree = "<group>"; };
 		5DD0C6CE7696584E460D0F6F /* Uninstall.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Uninstall.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -74,6 +76,7 @@
 				8C72D0733EA128F70B54DD8D /* AppScanner.swift */,
 				FB3E0248A76CC1BDEAEF34CD /* ContentView.swift */,
 				379F339D3CDFEAAADAD71E38 /* UninstallApp.swift */,
+				A7C1000000000000000000A1 /* Assets.xcassets */,
 			);
 			path = Uninstall;
 			sourceTree = "<group>";
@@ -103,6 +106,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 7C41A5482F4A155CDABAF86F /* Build configuration list for PBXNativeTarget "Uninstall" */;
 			buildPhases = (
+				A7C3000000000000000000A1 /* Resources */,
 				6B3848F2E1227FEA8D9C2F87 /* Sources */,
 			);
 			buildRules = (
@@ -152,6 +156,17 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A7C3000000000000000000A1 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A7C2000000000000000000A1 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		1E4FF586214ED5EE23133C18 /* Sources */ = {
