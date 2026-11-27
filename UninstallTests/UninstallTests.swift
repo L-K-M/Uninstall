@@ -102,6 +102,32 @@ final class UninstallTests: XCTestCase {
         XCTAssertEqual(full.relatedBytes, try allocatedBytes(containerFile))
     }
 
+    func testIncompleteMeasurementDoesNotPreventRemovingVerifiedParent() throws {
+        try makeApp(relativePath: "Editor.app")
+        let cache = library.appendingPathComponent("Caches/\(identifier)", isDirectory: true)
+        let locked = cache.appendingPathComponent("Locked", isDirectory: true)
+        try makeFile(at: locked.appendingPathComponent("data"))
+        try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: locked.path)
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: locked.path)
+        }
+
+        let app = try XCTUnwrap(scanner.discover().first)
+        let item = try XCTUnwrap(scanner.measure(app).relatedItems.first { $0.category == .cache })
+        XCTAssertFalse(item.usage.isComplete)
+        XCTAssertNotNil(item.identity)
+        XCTAssertTrue(item.canRemove)
+
+        var attempted: [URL] = []
+        let result = AppRemoval.perform(RemovalPlan(app: app, relatedItems: [item]), moveToTrash: { url in
+            attempted.append(url)
+        })
+
+        XCTAssertEqual(attempted, [app.url, item.url])
+        XCTAssertEqual(result.moved, [app.url, item.url])
+        XCTAssertTrue(result.problems.isEmpty)
+    }
+
     func testProtectedAppsAreMeasuredWithoutOpeningRelatedFiles() throws {
         try makeApp(relativePath: "Editor.app")
         try makeFile(at: library.appendingPathComponent("Caches/\(identifier)/data"))

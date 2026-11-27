@@ -70,7 +70,7 @@ struct RelatedItem: Identifiable, Sendable {
     let usage: DiskUsage
     var needsContainerScan = false
 
-    var canRemove: Bool { identity != nil && usage.isComplete }
+    var canRemove: Bool { identity != nil }
 }
 
 struct AppFootprint: Sendable {
