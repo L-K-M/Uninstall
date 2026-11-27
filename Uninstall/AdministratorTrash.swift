@@ -2,6 +2,12 @@ import Darwin
 import Foundation
 
 enum AdministratorTrash {
+    enum MoveOutcome: Equatable {
+        case moved
+        case cancelled
+        case failed(String)
+    }
+
     static func move(_ app: InstalledApp) throws {
         guard !app.isProtected, app.url.pathExtension.lowercased() == "app",
               AppScanner.isDirectPath(app.url), AppScanner.fileIdentity(at: app.url) == app.identity
@@ -20,7 +26,7 @@ enum AdministratorTrash {
         let sourcePath = try physicalPath(for: app.url)
         let trashPath = try physicalPath(for: trash)
         let stem = app.url.deletingPathExtension().lastPathComponent
-        let alternateName = "\(stem.utf8.count < 190 ? stem : "App") (\(UUID().uuidString)).app"
+        let alternateName = alternateName(for: stem)
         let flags = RENAME_EXCL | RENAME_NOFOLLOW_ANY
 
         let arguments = [
@@ -41,11 +47,41 @@ enum AdministratorTrash {
         process.waitUntilExit()
 
         let result = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
-        if process.terminationStatus == 0 {
-            if result == "moved" { return }
-            if result == "cancelled" { throw CocoaError(.userCancelled) }
+        switch outcome(processStatus: process.terminationStatus, output: result) {
+        case .moved:
+            return
+        case .cancelled:
+            throw CocoaError(.userCancelled)
+        case .failed(let message):
+            throw MoveError(message)
         }
-        throw MoveError(result.isEmpty ? "macOS could not complete the authorized move to Trash." : result)
+    }
+
+    // Diagnostics can share the pipe, so a successful move is recognised by a
+    // unique sentinel line rather than by exact equality on the whole output.
+    static func outcome(processStatus: Int32, output: String) -> MoveOutcome {
+        let lines = output.split(separator: "\n").map {
+            $0.trimmingCharacters(in: .whitespaces)
+        }
+        guard processStatus == 0 else {
+            return .failed(failureMessage(output))
+        }
+        if lines.contains("UNINSTALL_MOVE_OK") { return .moved }
+        if lines.contains("cancelled") { return .cancelled }
+        return .failed(failureMessage(output))
+    }
+
+    private static func failureMessage(_ output: String) -> String {
+        output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? "macOS could not complete the authorized move to Trash."
+            : output.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    // Keep the fallback name within the filesystem name limit even for long stems.
+    static func alternateName(for stem: String) -> String {
+        let suffix = " (\(UUID().uuidString)).app"
+        let base = stem.utf8.count <= 255 - suffix.utf8.count ? stem : "App"
+        return base + suffix
     }
 
     private static func birthTime(_ identity: FileIdentity) -> String {
@@ -116,13 +152,13 @@ enum AdministratorTrash {
 
         const originalName = source.slice(source.lastIndexOf("/") + 1);
         if ($.renamex_np(source, trash + "/" + originalName, Number(flags)) === 0) {
-            return "moved";
+            return "UNINSTALL_MOVE_OK";
         }
         let failure = $.__error()[0];
         if (failure === Number(exists)) {
             verifyDirectory(source, device, appInode, appBirth, "The app");
             if ($.renamex_np(source, trash + "/" + alternate, Number(flags)) === 0) {
-                return "moved";
+                return "UNINSTALL_MOVE_OK";
             }
             failure = $.__error()[0];
         }
