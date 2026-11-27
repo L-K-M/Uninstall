@@ -273,7 +273,6 @@ struct ContentView: View {
         let total = footprint.totalBytes
         let appShare = total > 0 ? CGFloat(footprint.bundle.bytes) / CGFloat(total) : 0
         let relatedShare = total > 0 ? CGFloat(footprint.relatedBytes) / CGFloat(total) : 0
-        let unmeasuredShare = max(0, 1 - appShare - relatedShare)
 
         return VStack(alignment: .leading, spacing: 9) {
             HStack(alignment: .firstTextBaseline) {
@@ -285,24 +284,36 @@ struct ContentView: View {
 
             if total > 0 {
                 GeometryReader { geometry in
-                    HStack(spacing: 2) {
-                        segment(width: geometry.size.width * appShare, color: Color.accentColor)
-                        segment(width: geometry.size.width * relatedShare, color: Color.accentColor.opacity(0.4))
-                        segment(width: geometry.size.width * unmeasuredShare, color: .secondary.opacity(0.18))
+                    ZStack(alignment: .leading) {
+                        // The track is only visible when something is unmeasured: it is
+                        // the part of the picture we cannot size, not a zero.
+                        if !footprint.isComplete {
+                            RoundedRectangle(cornerRadius: 2).fill(Color.secondary.opacity(0.18))
+                        }
+                        HStack(spacing: 2) {
+                            if appShare > 0 {
+                                segment(width: geometry.size.width * appShare, color: Color.accentColor)
+                            }
+                            if relatedShare > 0 {
+                                segment(width: geometry.size.width * relatedShare,
+                                        color: Color.accentColor.opacity(0.4))
+                            }
+                        }
                     }
                 }
                 .frame(height: 8)
+                .clipShape(RoundedRectangle(cornerRadius: 4))
                 .accessibilityElement()
                 .accessibilityLabel("Storage breakdown")
-                .accessibilityValue(
-                    "App \(diskSize(footprint.bundle)), related files \(diskSize(relatedUsage))"
-                        + (unmeasuredShare > 0 ? ", unmeasured remainder" : ""))
+                .accessibilityValue(storageBarDescription(app: diskSize(footprint.bundle),
+                                                          related: diskSize(relatedUsage),
+                                                          unmeasured: !footprint.isComplete))
 
                 HStack(spacing: 14) {
                     legend(Color.accentColor, "App", diskSize(footprint.bundle))
                     legend(Color.accentColor.opacity(0.4), "Related Files", diskSize(relatedUsage))
-                    if unmeasuredShare > 0 {
-                        legend(.secondary.opacity(0.18), "Unmeasured", "")
+                    if !footprint.isComplete {
+                        legend(Color.secondary.opacity(0.18), "Unmeasured", "")
                     }
                 }
             }
@@ -321,10 +332,15 @@ struct ContentView: View {
         }
     }
 
+    private func storageBarDescription(app: String, related: String, unmeasured: Bool) -> String {
+        "App \(app), related files \(related)"
+            + (unmeasured ? ", plus files that could not be measured" : "")
+    }
+
     private func segment(width: CGFloat, color: Color) -> some View {
         RoundedRectangle(cornerRadius: 2)
             .fill(color)
-            .frame(width: max(0, width - 1))
+            .frame(width: width)
     }
 
     private func legend(_ color: Color, _ label: String, _ value: String) -> some View {
@@ -410,25 +426,15 @@ struct ContentView: View {
     }
 
     private func selectAll(_ items: [RelatedItem], in row: AppRow) {
-        var checked = checkedByApp[row.id] ?? []
-        var unchecked = uncheckedByApp[row.id] ?? []
-        for item in items where item.canRemove {
-            checked.insert(item.id)
-            unchecked.remove(item.id)
-        }
-        checkedByApp[row.id] = checked
-        uncheckedByApp[row.id] = unchecked
+        let updated = selection(for: row).selectingAll()
+        checkedByApp[row.id] = updated.checked
+        uncheckedByApp[row.id] = updated.unchecked
     }
 
     private func selectNone(_ items: [RelatedItem], in row: AppRow) {
-        var checked = checkedByApp[row.id] ?? []
-        var unchecked = uncheckedByApp[row.id] ?? []
-        for item in items {
-            checked.remove(item.id)
-            unchecked.insert(item.id)
-        }
-        checkedByApp[row.id] = checked
-        uncheckedByApp[row.id] = unchecked
+        let updated = selection(for: row).selectingNone()
+        checkedByApp[row.id] = updated.checked
+        uncheckedByApp[row.id] = updated.unchecked
     }
 
     // MARK: Footer
@@ -489,42 +495,35 @@ struct ContentView: View {
     }
 
     private func selectedBytesLabel(for row: AppRow) -> String {
-        let ids = checkedFiles(for: row)
-        let related = (row.footprint?.relatedItems ?? []).filter { ids.contains($0.id) }
-            .reduce(0) { $0 + $1.usage.bytes }
+        let current = selection(for: row)
         let bundle = row.footprint?.bundle.bytes ?? 0
-        return diskSize(DiskUsage(bytes: bundle + related, isComplete: true))
+        let complete = (row.footprint?.bundle.isComplete ?? false) && current.isComplete
+        return diskSize(DiskUsage(bytes: bundle + current.selectedBytes, isComplete: complete))
     }
 
-    /// The related items that should move with the app.
-    ///
-    /// An item is selected when the user checked it, or when the user has never decided
-    /// and its category is selected by default. Items the user unchecked stay unchecked.
+    /// The selection rules for one row, including whether the row allows related
+    /// removal at all. A duplicate install or a protected app never does, so its
+    /// footer total and its primary action agree with its toggles.
+    private func selection(for row: AppRow) -> RelatedSelection {
+        RelatedSelection(allowsRelatedRemoval: !row.hasOtherInstallations && !row.app.isProtected,
+                         items: row.footprint?.relatedItems ?? [],
+                         checked: checkedByApp[row.id] ?? [],
+                         unchecked: uncheckedByApp[row.id] ?? [])
+    }
+
     private func checkedFiles(for row: AppRow) -> Set<String> {
-        let items = row.footprint?.relatedItems ?? []
-        let checked = checkedByApp[row.id] ?? []
-        let unchecked = uncheckedByApp[row.id] ?? []
-        return Set(items.filter { item in
-            checked.contains(item.id)
-                || (!unchecked.contains(item.id) && item.canRemove && item.category.selectedByDefault)
-        }.map(\.id))
+        selection(for: row).selectedIDs
     }
 
     private func binding(for item: RelatedItem, in row: AppRow) -> Binding<Bool> {
         Binding {
-            !row.hasOtherInstallations && !row.app.isProtected && checkedFiles(for: row).contains(item.id)
+            selection(for: row).selectedIDs.contains(item.id)
         } set: { checked in
-            var checkedSet = checkedByApp[row.id] ?? []
-            var uncheckedSet = uncheckedByApp[row.id] ?? []
-            if checked {
-                checkedSet.insert(item.id)
-                uncheckedSet.remove(item.id)
-            } else {
-                checkedSet.remove(item.id)
-                uncheckedSet.insert(item.id)
-            }
-            checkedByApp[row.id] = checkedSet
-            uncheckedByApp[row.id] = uncheckedSet
+            let updated = checked
+                ? selection(for: row).selecting(item)
+                : selection(for: row).deselecting(item)
+            checkedByApp[row.id] = updated.checked
+            uncheckedByApp[row.id] = updated.unchecked
         }
     }
 

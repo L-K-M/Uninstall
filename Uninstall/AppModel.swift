@@ -17,6 +17,76 @@ struct AppRow: Identifiable {
     var hasOtherInstallations = false
 }
 
+/// Which related items move to the Trash along with an app.
+///
+/// Kept as a plain value type so the selection rules can be tested without a view.
+/// An item is selected when it can be removed, the row allows related removal at all
+/// (a duplicate install or a protected app never does), and either the user checked it
+/// or the user has never decided and its category is selected by default.
+struct RelatedSelection {
+    var allowsRelatedRemoval: Bool
+    var items: [RelatedItem]
+    var checked: Set<String>
+    var unchecked: Set<String>
+
+    init(allowsRelatedRemoval: Bool, items: [RelatedItem],
+         checked: Set<String> = [], unchecked: Set<String> = []) {
+        self.allowsRelatedRemoval = allowsRelatedRemoval
+        self.items = items
+        self.checked = checked
+        self.unchecked = unchecked
+    }
+
+    var selectedIDs: Set<String> {
+        guard allowsRelatedRemoval else { return [] }
+        return Set(items.filter { item in
+            item.canRemove && (checked.contains(item.id)
+                || (!unchecked.contains(item.id) && item.category.selectedByDefault))
+        }.map(\.id))
+    }
+
+    var selectedBytes: Int64 {
+        items.filter { selectedIDs.contains($0.id) }.reduce(0) { $0 + $1.usage.bytes }
+    }
+
+    /// Whether every selected item was measured completely.
+    var isComplete: Bool {
+        items.filter { selectedIDs.contains($0.id) }.allSatisfy(\.usage.isComplete)
+    }
+
+    func selecting(_ item: RelatedItem) -> RelatedSelection {
+        var copy = self
+        copy.checked.insert(item.id)
+        copy.unchecked.remove(item.id)
+        return copy
+    }
+
+    func deselecting(_ item: RelatedItem) -> RelatedSelection {
+        var copy = self
+        copy.checked.remove(item.id)
+        copy.unchecked.insert(item.id)
+        return copy
+    }
+
+    func selectingAll() -> RelatedSelection {
+        var copy = self
+        for item in items where item.canRemove {
+            copy.checked.insert(item.id)
+            copy.unchecked.remove(item.id)
+        }
+        return copy
+    }
+
+    func selectingNone() -> RelatedSelection {
+        var copy = self
+        for item in items {
+            copy.checked.remove(item.id)
+            copy.unchecked.insert(item.id)
+        }
+        return copy
+    }
+}
+
 struct RemovalNotice: Identifiable {
     let id = UUID()
     let title: String
