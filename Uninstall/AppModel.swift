@@ -237,6 +237,10 @@ final class AppModel {
                 refreshRunningApps()
                 if !isRunning(app) { break }
             }
+            if isRunning(app) {
+                notice = RemovalNotice(title: "Couldn’t quit \(app.name)",
+                                       message: "\(app.name) is still running. Quit it manually, then try again.")
+            }
         }
     }
 }

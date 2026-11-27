@@ -120,14 +120,7 @@ struct ContentView: View {
                     Text(row.name).lineLimit(1)
                 }
                 .padding(.vertical, 2)
-                .contextMenu {
-                    Button("Open") { model.open(row.app) }
-                    Button("Reveal in Finder") { model.reveal(row.app) }
-                    Button("Copy Path") { model.copyPath(row.app) }
-                    if model.isRunning(row.app) {
-                        Button("Quit") { model.quit(row.app) }
-                    }
-                }
+                .contextMenu { rowActions(for: row) }
             }
             .width(min: 160, ideal: 245)
 
@@ -141,16 +134,20 @@ struct ContentView: View {
                 }
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
+                .contextMenu { rowActions(for: row) }
             }
             .width(min: 92, ideal: 104, max: 130)
 
             TableColumn("Last Opened", value: \.lastOpenedSortValue) { row in
-                if let date = row.lastOpened {
-                    Text(date, format: .dateTime.year().month(.abbreviated).day())
-                        .foregroundStyle(.secondary)
-                } else {
-                    Text("Unknown").foregroundStyle(.tertiary)
+                Group {
+                    if let date = row.lastOpened {
+                        Text(date, format: .dateTime.year().month(.abbreviated).day())
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("Unknown").foregroundStyle(.tertiary)
+                    }
                 }
+                .contextMenu { rowActions(for: row) }
             }
             .width(min: 100, ideal: 112, max: 140)
         }
@@ -164,6 +161,20 @@ struct ContentView: View {
                     ContentUnavailableView("No Apps Found", systemImage: "macwindow")
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func rowActions(for row: AppRow) -> some View {
+        Button("Open") { model.open(row.app) }
+            .disabled(model.removingName != nil)
+        Button("Reveal in Finder") { model.reveal(row.app) }
+            .disabled(model.removingName != nil)
+        Button("Copy Path") { model.copyPath(row.app) }
+            .disabled(model.removingName != nil)
+        if model.isRunning(row.app), !row.app.isProtected {
+            Button("Quit") { model.quit(row.app) }
+                .disabled(model.removingName != nil)
         }
     }
 
