@@ -23,6 +23,18 @@ struct RemovalNotice: Identifiable {
     let message: String
 }
 
+func updateRowsAfterSuccessfulRemoval(_ rows: inout [AppRow], removedApp: InstalledApp) {
+    rows.removeAll { $0.id == removedApp.id }
+    guard let identifier = removedApp.bundleIdentifier?.lowercased() else { return }
+
+    let remainingCopies = rows.count { row in
+        row.app.bundleIdentifier?.lowercased() == identifier
+    }
+    for index in rows.indices where rows[index].app.bundleIdentifier?.lowercased() == identifier {
+        rows[index].hasOtherInstallations = remainingCopies > 1
+    }
+}
+
 @MainActor @Observable
 final class AppModel {
     private(set) var rows: [AppRow] = []
@@ -195,8 +207,17 @@ final class AppModel {
                 } else if result.wasCancelled {
                     status = "Removal canceled."
                 }
+
+                if result.moved.contains(app.url) {
+                    updateRowsAfterSuccessfulRemoval(&rows, removedApp: app)
+                    if selection == app.id { selection = nil }
+                    refreshRunningApps()
+                } else {
+                    refresh()
+                }
+            } else {
+                refresh()
             }
-            refresh()
         }
     }
 
