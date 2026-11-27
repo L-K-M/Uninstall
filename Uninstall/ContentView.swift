@@ -221,7 +221,10 @@ struct ContentView: View {
     }
 
     private func storage(for footprint: AppFootprint) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
+        let hasDeferredContainer = footprint.relatedItems.contains(where: \.needsContainerScan)
+        let hasMeasurementFailure = !footprint.bundle.isComplete || !footprint.relatedInventoryComplete
+            || footprint.relatedItems.contains { !$0.usage.isComplete && !$0.needsContainerScan }
+        return VStack(alignment: .leading, spacing: 7) {
             HStack {
                 Text("Storage").font(.headline)
                 Spacer()
@@ -233,7 +236,12 @@ struct ContentView: View {
                                          isComplete: footprint.relatedInventoryComplete
                                              && footprint.relatedItems.allSatisfy(\.usage.isComplete))
             storageLine("Related Files", value: diskSize(relatedUsage))
-            if !footprint.isComplete {
+            if hasDeferredContainer {
+                Label("App container not yet scanned; totals may be larger.", systemImage: "info.circle")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            if hasMeasurementFailure {
                 Label("Some files couldn’t be measured.", systemImage: "info.circle")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -276,8 +284,10 @@ struct ContentView: View {
                     Text(displayedPath(item.url))
                         .textSelection(.enabled)
                     if item.needsContainerScan {
-                        Text("Choose Scan Including App Containers to measure this folder.")
-                            .foregroundStyle(.secondary)
+                        Button("Scan Including App Containers") {
+                            scan(includingContainers: true)
+                        }
+                        .disabled(model.removingName != nil || model.isScanning)
                     } else if let note = item.category.note {
                         Text(note)
                     }
