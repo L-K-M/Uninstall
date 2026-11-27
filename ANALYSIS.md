@@ -1,35 +1,78 @@
 # Uninstall: future work
 
-Actionable follow-up work from a source, test and macOS build review. Preserve the existing Trash-first flow, explicit confirmation, and identity checks. Verify open pull requests and current behavior before starting an item.
+Actionable follow-up work from source, test, runtime, accessibility and filesystem review. Preserve the existing Trash-first flow, explicit confirmation, and identity checks. Fetch current main and inspect open pull requests before starting an item.
+
+Baseline measurements from 2026-11-27 on one Mac: 92 apps were discovered in about 0.15 s; warm-cache serial measurement of all apps took about 4 s, with Xcode alone contributing about 3 s; the first cold application scan consumed roughly 25 s of CPU. Treat those as directional data, not universal targets.
+
+## In flight
+
+These bounded fixes have open Devin pull requests and should not be duplicated. Remove this section and any completed entries after the PRs are merged or closed:
+
+- PR #4: allow verified related files to be removed even when recursive measurement is incomplete.
+- PR #10: update the removed row locally after successful removal instead of immediately rescanning everything.
+- PR #12: show per-item and total selected sizes in the removal confirmation.
+- PR #13: batch scan-measurement updates to reduce table churn.
+- PR #16: add Command-F search focus, path search, clear search, and preserve selection while filtering.
+- PR #17: prevent the XCTest host application from scanning the real host system during unit tests.
 
 ## Correctness and safety
 
-- **Make the scope of duplicate detection explicit.** Even a complete scan covers only three directories; another copy outside those locations can share data. Add custom scan roots with safeguards against nested roots and symlinks; consider an explicit additional confirmation for related data. Other copies outside scanned locations may share data.
-- **Reassess identity verification at the point of moving.** The normal Trash path checks identity before a separate filesystem operation, leaving a time-of-check/time-of-use window. The privileged path also verifies before rename. Investigate descriptor-relative, no-follow operations and macOS Trash semantics before changing this security-sensitive code; test path substitution races and volume boundaries.
-- **Surface skipped related paths and discovery errors accurately.** `isDirectPath` silently skips symlinks and inaccessible parents; unexpected `lstat` errors besides permission errors are silently treated as absent. A complete inventory should require either a verified absence or a visible reason for omission. Exercise EIO, symlinked Library paths, and permissions.
-- **Clarify sizes and shared storage.** Allocated blocks are estimates, not guaranteed reclaimable bytes: APFS clones, snapshots, compression and hard links outside the measured tree can change reclaimable space. Avoid promising exact savings. Hard-link deduplication shared across separate categories also makes each category depend on enumeration order; measure independently for category estimates and deduplicate only for an aggregate, with tests.
-- **Distinguish deferred container scanning from a failed measurement.** Offer a per-app container scan rather than scanning containers for every app; explain permission implications and retain the distinction between skipped, inaccessible and partial results.
-- **Protect user data against incomplete selection context.** A related-file match by bundle ID is only a heuristic, and caches can contain valuable offline data. Explain the matching rule and consequences near the confirmation; consider defaulting all related items off. Test duplicate installations, unknown bundle IDs and applications with nonstandard data locations.
-- **Improve running-app handling.** Explain which app or copy must quit, offer a non-forced quit action and recheck before removal. Running helper processes and launch agents may remain even when the main bundle is absent; investigate safe detection without killing unrelated processes.
+- **Make duplicate-detection scope explicit and expandable.** Even a complete scan covers only `/Applications`, `~/Applications` and `/System/Applications`; copies in Downloads, other volumes or custom locations can share data. Add custom scan roots with safeguards against nested roots and symlinks, and explain remaining uncertainty before removing related data.
+- **Reassess identity verification at the point of moving.** The normal Trash path checks identity before a separate filesystem operation, leaving a time-of-check/time-of-use window. The privileged path is stronger but still security-sensitive. Investigate descriptor-relative or no-follow operations and macOS Trash semantics before changing it; test path substitution races and volume boundaries.
+- **Surface skipped paths and discovery errors accurately.** `isDirectPath` silently skips symlinked candidates and inaccessible parents; unexpected `lstat` errors besides permission errors are treated as absence. A complete inventory should require either verified absence or a visible reason for omission. Exercise EIO, symlinked Library paths, permissions and unreadable application roots.
+- **Handle symlinked applications deliberately.** The scanner ignores `.app` symlinks. On current macOS this can omit cryptex-linked system apps such as Safari, and it can omit user-installed aliases. Either support verified symlinked bundles or show them as skipped rather than pretending they do not exist.
+- **Clarify sizes and shared storage.** Allocated blocks are estimates, not guaranteed reclaimable bytes: APFS clones, snapshots, compression and hard links outside the measured tree can change what is actually freed. Hard-link deduplication shared across categories also makes category sizes depend on enumeration order; measure independently for category estimates and deduplicate only for an aggregate, with tests.
+- **Distinguish deferred container scanning from failure.** A container that was intentionally not scanned should not use the same copy or state as an inaccessible or partially measured item. Offer per-app container scanning rather than scanning containers for every app, explain privacy implications, and preserve deferred/inaccessible/partial states in the model.
+- **Protect user data against heuristic matching.** Bundle-ID paths miss vendor suites, app-name folders, group containers, launch agents, receipts, system-wide `/Library` files and nonstandard locations; shared IDs can also overassociate data. Explain the matching rule and consequences near confirmation, consider defaulting all related items off, and test duplicate installations, unknown IDs and custom locations.
+- **Improve running-process handling.** `NSWorkspace.runningApplications` misses helpers, command-line tools, XPC services and launch agents. Explain which exact app or copy must quit, offer a non-forced quit action, recheck before removal, and investigate safe helper detection without killing unrelated processes.
+- **Verify vendor uninstallers.** A matching `.app` beside the application is opened without checking developer identity or vendor relationship. Show its path and signing information and preferably require a same-team or clearly verified match before opening.
+- **Disclose multi-user scope.** Cleanup reads only the current user's Library. Removing a shared app can leave other users' caches, preferences and containers behind; say so in review copy before adding any multi-user cleanup.
+- **Tighten stale-file semantics.** Device/inode/birthtime catches replacement but not edits that preserve the inode. Decide whether modification time or content version belongs in identity checks, or adjust the “changed after scan” copy so it does not overstate the guarantee.
+- **Harden the administrator process lifecycle.** Success currently depends on the combined stdout/stderr exactly equaling `moved`, so any diagnostic can turn a successful move into a reported failure. Use a machine-readable final status or sentinel. Add timeout/cancellation for ignored authentication prompts and make process shutdown respond to task cancellation.
+- **Bound local launch history.** `observedLaunches` in UserDefaults grows forever and validates recreated apps only at whole-second birthtime precision. Prune stale paths and compare nanosecond birthtime where available.
 
 ## Performance and interaction
 
-- **Prioritize the selected app during scanning.** All apps are measured in discovery order, three at a time; a selected app may wait behind large bundles. Schedule selected work first, cancel stale scans, and test rapid selection and refresh without stale results.
-- **Reduce list churn while measuring.** Each completed scan mutates observable rows and the default size sort reorders the table, potentially moving a row under the pointer and repeatedly sorting and fetching icons. Profile with hundreds of apps; batch results, cache icons, and keep selection stable. Keep progress honest and ensure keyboard navigation remains responsive.
-- **Avoid repeated full rescans after removal.** Update the removed row immediately and refresh affected data in the background, with a manual rescan for external changes. Ensure partial failures and shared data remain accurately reflected.
-- **Improve search and keyboard flow.** Add a standard search shortcut, clear affordance, search by path as well as name and bundle ID, and preserve selection when a temporary filter hides it. Verify focus, VoiceOver, and keyboard-only review and cancellation.
+- **Prioritize visible or selected apps during measurement.** Apps are measured in discovery order, so the selected app may wait behind a huge bundle. Reprioritize when selection changes, cancel stale work, and test rapid selection and refresh without stale results.
+- **Reduce remaining list churn.** Scan updates are batched in PR #13, but rows can still reorder as sizes arrive. Consider deferring size reordering until the first pass completes or stabilizing rows while the pointer/keyboard is active. Profile with hundreds of apps and preserve honest progress.
+- **Cache and prepare icons off the critical path.** `NSWorkspace.icon(forFile:)` is called synchronously in row bodies. Cache by application identity and prepare icons before rendering where possible; test icon changes after app updates.
+- **Attack large-bundle measurement cost.** Measuring one huge app dominates wall time because each bundle is walked serially. Investigate `getattrlistbulk` or careful parallel subtree measurement while preserving hard-link and cross-device correctness. Benchmark cold and warm caches.
+- **Cache bundle measurements cautiously.** Large app bundles rarely change, while related files change often. A version/identity-aware in-memory or persistent cache could avoid repeated bundle walks, but it needs explicit invalidation and must not present stale cache data as fresh.
+- **Deprioritize protected system apps.** They inflate row and measurement counts but cannot be removed. Hide or collapse them by default, lazily measure them, or provide a clear visibility filter.
+- **Add scan cancellation and lifecycle ownership.** The scan menu can restart work but cannot cancel it, and scan lifetime is not tied clearly to the window. Provide cancellation, ensure partial state is coherent, and cancel or finish work deliberately when the window closes.
+- **Support incremental refresh.** Users need a way to re-measure one selected app or container without paying the cost of a full scan.
 
 ## Visual design and product ideas
 
-- **Give the detail pane a stronger hierarchy.** Present app icon, name, path and status as a compact identity header, followed by a storage breakdown and a clearly separated review action. Test long names, long paths, narrow windows, dark mode, increased contrast and accessibility text sizes.
-- **Explain and visualize storage.** Add a restrained segmented bar for app versus identified related files, with accessible text and uncertainty states. Show selected removable bytes separately from the estimated total; never imply Trash has freed space.
-- **Replace the generic initial state with a useful overview.** Show scan progress and aggregate counts or largest apps only when their meaning is defensible; avoid adding estimates across apps with shared data. Include a concise reminder that files go to Trash.
-- **Make per-file choices easier to understand.** Group items by risk, expose full paths and notes, offer select/deselect controls, and show exactly what will be moved in the confirmation. Keep destructive actions disabled for protected or unverifiable items.
-- **Add a delightful but factual cleanup receipt.** After a move, show app icon, moved item count and an “Open Trash” action, with partial failures prominently visible. Avoid a celebratory space-saved number before Trash is emptied.
-- **Provide a finished app identity.** The project references an AppIcon but has no asset catalog. Design and add a distinctive, legible macOS icon and check appearance at Dock, Finder and small sizes.
-- **Support audit and recovery.** Consider an optional local history with original and Trash URLs, a Finder reveal action, and clear retention/privacy controls. Do not promise one-click restoration without handling collisions, missing files and permissions.
+- **Give the detail pane a stronger hierarchy.** Present icon, name, path, version, bundle ID, source/provenance and running/protected/duplicate badges as a compact identity header, followed by storage and a clearly separated review action. Test long names, long paths, narrow windows, dark mode, increased contrast and accessibility text sizes.
+- **Explain and visualize storage.** Add a restrained segmented bar for app versus identified related files, with accessible values and uncertainty states. Show selected removable bytes separately from estimated totals; never imply Trash has already freed space.
+- **Replace the generic empty detail state with a useful overview.** Show scan progress, concise Trash-first safety copy, or defensible largest-candidate shortcuts. Avoid aggregating sizes across apps when shared data makes the total misleading.
+- **Make per-file choices easier to understand.** Group items by risk or data value, expose full paths and notes, align sizes, show default choices, and offer select/deselect controls. Keep destructive actions disabled for protected or unverifiable items.
+- **Add state information to rows.** Protected, running, duplicate, incomplete measurement, container scan needed and vendor uninstaller availability should be visible without opening details. Same-name duplicates need a location subtitle or other disambiguation.
+- **Use a denser, more polished table.** Current rows are attractive but sparse. Audit numeric right alignment, date formatting, vertical density, tooltip coverage, keyboard navigation and VoiceOver row structure.
+- **Add macOS conveniences.** Row context menus and detail actions should include Reveal in Finder, Copy Path, Open Vendor Uninstaller, measure this app/container, and removal commands. Add consistent tooltips and visible sort/scan state in menus.
+- **Provide a factual cleanup receipt.** After a move, show the app icon, moved item count and an “Open Trash” action, with partial failures prominent. Avoid celebratory space-saved numbers before Trash is emptied.
+- **Provide a finished app identity.** The project references `AppIcon` but has no asset catalog. Design and add a distinctive, legible macOS icon and verify Dock, Finder and small sizes.
+- **Support audit and recovery.** Consider a privacy-preserving local history of original and Trash URLs, with retention controls and clear recovery guidance. Do not promise one-click Put Back until collisions, missing files and permissions are designed.
+- **Localize deliberately.** Strings are hardcoded. Introduce localization infrastructure and audit fixed sheet/detail layouts for longer translations and larger text.
+
+## High-value feature backlog
+
+- **Leftover and orphan scanning.** Find files left by apps that are already gone. Use evidence-based confidence labels such as exact bundle ID, vendor prefix, app-name match or user-confirmed evidence; never present heuristic matches as certain.
+- **Batch uninstall.** Support multi-select, a review queue, total selected size, per-item failures and safe continuation without losing the queue.
+- **Smart cleanup recommendations.** Rank large, unused, duplicate or never-opened apps with factual explanations, not scare copy.
+- **Launch-item awareness.** Detect matching LaunchAgents, LaunchDaemons, login items and helper tools; explain them and offer separately reviewable choices.
+- **Duplicate-app comparison.** Show version, location, size and last-opened date side by side and help the user keep the right copy.
+- **Drag-and-drop uninstall.** Accept an app dropped on the window or Dock icon, scan it, and open the standard review flow.
+- **Optional system-app filter.** Hide protected Apple apps by default while keeping them searchable and auditable.
+- **Version and provenance metadata.** Show version, developer/signing status, architecture, installation source hints and location.
+- **Cleanup cockpit.** A concise overview of large unused apps, orphan leftovers and duplicates, each as a review queue rather than automatic deletion.
+- **Menu-bar quick glance.** Show scan status or cleanup candidates without opening the main window; never bypass the normal review for destructive actions.
+- **First-run explanation.** Three concise panels: everything goes to Trash, related matches are reviewable, and containers require explicit permission.
 
 ## Validation gaps
 
-- Add tests for enumeration failures, duplicate installations, cancellation and refresh races, partial measurements, unexpected filesystem errors, running-app changes during confirmation, and authorization failures. Add UI checks for keyboard access, resizing and long text. Test real APFS, external volumes, permissions and a disposable app rather than moving real user data.
-- Verify signed distribution, notarization, app icon, privacy prompts, and the administrator path on a clean supported macOS installation before release.
+- Add tests for enumeration failures, duplicate installations, cancellation and refresh races, partial measurements, unexpected filesystem errors, running-app changes during confirmation, authorization failures and administrator-process timeouts.
+- Add UI tests or previews for keyboard access, VoiceOver, resizing, long text, large dynamic type, light/dark mode and increased contrast.
+- Test real APFS volumes, external volumes, permissions, symlinked installation roots and a disposable app rather than moving real user data.
+- Verify signed distribution, notarization, app icon, privacy prompts and the administrator path on a clean supported macOS installation before release.
