@@ -127,21 +127,28 @@ final class UninstallTests: XCTestCase {
             ("Internet Plug-Ins/\(identifier).plugin", .plugin, true),
             ("QuickLook/\(identifier).qlgenerator", .quickLook, true),
         ]
+        var fixtureFiles: [URL] = []
         for location in locations {
             let url = library.appendingPathComponent(location.path)
             if location.directory {
-                try makeFile(at: url.appendingPathComponent("Contents/Info.plist"))
+                let leaf = url.appendingPathComponent("Contents/Info.plist")
+                try makeFile(at: leaf)
+                fixtureFiles.append(leaf)
             } else {
                 try makeFile(at: url)
+                fixtureFiles.append(url)
             }
         }
 
         // Similarly named neighbours must not be treated as leftovers.
         try makeFile(at: library.appendingPathComponent("LaunchAgents/\(identifier)Extra.plist"))
         try makeFile(at: library.appendingPathComponent("PreferencePanes/\(identifier)Other.prefPane/Contents/Info.plist"))
+        try makeFile(at: library.appendingPathComponent("Preferences/\(identifier)Extra/Settings.plist"))
 
         let footprint = scanner.measure(app)
+        XCTAssertTrue(footprint.isComplete)
         XCTAssertEqual(footprint.relatedItems.count, locations.count)
+        XCTAssertTrue(footprint.relatedItems.allSatisfy(\.canRemove))
         let byPath = Dictionary(uniqueKeysWithValues: footprint.relatedItems.map { ($0.url.path, $0.category) })
         for location in locations {
             let url = library.appendingPathComponent(location.path)
@@ -149,6 +156,11 @@ final class UninstallTests: XCTestCase {
         }
         XCTAssertNil(byPath[library.appendingPathComponent("LaunchAgents/\(identifier)Extra.plist").path])
         XCTAssertNil(byPath[library.appendingPathComponent("PreferencePanes/\(identifier)Other.prefPane").path])
+        XCTAssertNil(byPath[library.appendingPathComponent("Preferences/\(identifier)Extra").path])
+        let expectedBytes = try fixtureFiles.reduce(into: Int64(0)) {
+            $0 += try allocatedBytes($1)
+        }
+        XCTAssertEqual(footprint.relatedBytes, expectedBytes)
     }
 
     func testHardLinkedRelatedFilesCountOnceTowardTotal() throws {
