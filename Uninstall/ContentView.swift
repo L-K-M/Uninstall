@@ -20,6 +20,7 @@ struct ContentView: View {
     @State private var search = ""
     @State private var sortOrder = [KeyPathComparator(\AppRow.totalSortValue, order: .reverse)]
     @State private var checkedByApp: [String: Set<String>] = [:]
+    @FocusState private var searchFocused: Bool
 
     private var visibleRows: [AppRow] {
         let term = search.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -66,11 +67,21 @@ struct ContentView: View {
 
             ToolbarItem(placement: .automatic) {
                 Menu {
-                    Button("Largest First") { sortOrder = [KeyPathComparator(\AppRow.totalSortValue, order: .reverse)] }
-                    Button("Smallest First") { sortOrder = [KeyPathComparator(\AppRow.totalSortValue)] }
-                    Button("Recently Opened") { sortOrder = [KeyPathComparator(\AppRow.lastOpenedSortValue, order: .reverse)] }
-                    Button("Least Recently Opened") { sortOrder = [KeyPathComparator(\AppRow.lastOpenedSortValue)] }
-                    Button("Name") { sortOrder = [KeyPathComparator(\AppRow.name)] }
+                    sortItem("Largest First", keyPath: \AppRow.totalSortValue, reversed: true) {
+                        sortOrder = [KeyPathComparator(\AppRow.totalSortValue, order: .reverse)]
+                    }
+                    sortItem("Smallest First", keyPath: \AppRow.totalSortValue, reversed: false) {
+                        sortOrder = [KeyPathComparator(\AppRow.totalSortValue)]
+                    }
+                    sortItem("Recently Opened", keyPath: \AppRow.lastOpenedSortValue, reversed: true) {
+                        sortOrder = [KeyPathComparator(\AppRow.lastOpenedSortValue, order: .reverse)]
+                    }
+                    sortItem("Least Recently Opened", keyPath: \AppRow.lastOpenedSortValue, reversed: false) {
+                        sortOrder = [KeyPathComparator(\AppRow.lastOpenedSortValue)]
+                    }
+                    sortItem("Name", keyPath: \AppRow.name, reversed: false) {
+                        sortOrder = [KeyPathComparator(\AppRow.name)]
+                    }
                 } label: {
                     Label("Sort Apps", systemImage: "arrow.up.arrow.down")
                 }
@@ -81,9 +92,19 @@ struct ContentView: View {
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 180)
                     .accessibilityLabel("Search apps")
+                    .focused($searchFocused)
             }
         }
         .task { model.start() }
+        .onReceive(NotificationCenter.default.publisher(for: .scanAgain)) { _ in
+            model.refresh(includingContainers: false)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .scanIncludingContainers)) { _ in
+            model.refresh(includingContainers: true)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .focusSearch)) { _ in
+            searchFocused = true
+        }
         .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didLaunchApplicationNotification)
             .receive(on: RunLoop.main)) { _ in
             model.refreshRunningApps()
@@ -359,6 +380,16 @@ struct ContentView: View {
         }
         let nameOrder = left.name.localizedStandardCompare(right.name)
         return nameOrder == .orderedSame ? left.id < right.id : nameOrder == .orderedAscending
+    }
+
+    private func sortItem(_ title: String, keyPath: AnyKeyPath, reversed: Bool,
+                          action: @escaping () -> Void) -> some View {
+        let active = sortOrder.first.map {
+            $0.keyPath == keyPath && ($0.order == .reverse) == reversed
+        } ?? false
+        return Button(action: action) {
+            Label(title, systemImage: active ? "checkmark" : "")
+        }
     }
 }
 
