@@ -204,7 +204,7 @@ struct ContentView: View {
                         }
                     }
                     if let footprint = row.footprint {
-                        storage(for: footprint)
+                        storage(for: row, footprint: footprint)
                         relatedFiles(for: row, footprint: footprint)
                     } else {
                         ProgressView("Measuring storage…").controlSize(.small)
@@ -220,7 +220,7 @@ struct ContentView: View {
         }
     }
 
-    private func storage(for footprint: AppFootprint) -> some View {
+    private func storage(for row: AppRow, footprint: AppFootprint) -> some View {
         VStack(alignment: .leading, spacing: 7) {
             HStack {
                 Text("Storage").font(.headline)
@@ -228,11 +228,7 @@ struct ContentView: View {
                 Text(diskSize(DiskUsage(bytes: footprint.totalBytes, isComplete: footprint.isComplete)))
                     .font(.headline).monospacedDigit()
             }
-            storageLine("App", value: diskSize(footprint.bundle))
-            let relatedUsage = DiskUsage(bytes: footprint.relatedBytes,
-                                         isComplete: footprint.relatedInventoryComplete
-                                             && footprint.relatedItems.allSatisfy(\.usage.isComplete))
-            storageLine("Related Files", value: diskSize(relatedUsage))
+            storageBreakdown(row: row, footprint: footprint)
             if !footprint.isComplete {
                 Label("Some files couldn’t be measured.", systemImage: "info.circle")
                     .font(.caption)
@@ -241,13 +237,53 @@ struct ContentView: View {
         }
     }
 
-    private func storageLine(_ label: String, value: String) -> some View {
-        HStack {
-            Text(label)
-            Spacer()
-            Text(value).monospacedDigit()
+    /// A compact allocation bar: app bundle, related files selected for
+    /// removal, and everything else that was found.
+    private func storageBreakdown(row: AppRow, footprint: AppFootprint) -> some View {
+        let appBytes = footprint.bundle.bytes
+        let selected = selectedRelatedBytes(for: row, footprint: footprint)
+        let other = max(0, footprint.relatedBytes - selected)
+        let total = max(1, appBytes + footprint.relatedBytes)
+
+        return VStack(alignment: .leading, spacing: 6) {
+            GeometryReader { proxy in
+                HStack(spacing: 2) {
+                    Rectangle()
+                        .fill(Color.accentColor)
+                        .frame(width: proxy.size.width * CGFloat(appBytes) / CGFloat(total))
+                    Rectangle()
+                        .fill(Color.orange)
+                        .frame(width: proxy.size.width * CGFloat(selected) / CGFloat(total))
+                    Rectangle()
+                        .fill(Color.secondary.opacity(0.35))
+                        .frame(width: proxy.size.width * CGFloat(other) / CGFloat(total))
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 4))
+            }
+            .frame(height: 9)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Storage breakdown")
+            HStack(spacing: 12) {
+                legendItem(Color.accentColor, "App \(diskSize(footprint.bundle))")
+                legendItem(Color.orange, "Selected \(diskSize(selected))")
+                legendItem(Color.secondary.opacity(0.35), "Other \(diskSize(other))")
+            }
+            .font(.caption)
         }
-        .foregroundStyle(.secondary)
+    }
+
+    private func legendItem(_ color: Color, _ label: String) -> some View {
+        HStack(spacing: 4) {
+            Circle().fill(color).frame(width: 7, height: 7)
+            Text(label).foregroundStyle(.secondary).monospacedDigit()
+        }
+    }
+
+    private func selectedRelatedBytes(for row: AppRow, footprint: AppFootprint) -> Int64 {
+        let ids = checkedFiles(for: row)
+        return footprint.relatedItems
+            .filter { ids.contains($0.id) }
+            .reduce(0) { $0 + $1.usage.bytes }
     }
 
     private func relatedFiles(for row: AppRow, footprint: AppFootprint) -> some View {
@@ -263,28 +299,76 @@ struct ContentView: View {
             } else if footprint.relatedItems.isEmpty {
                 Text("No related files found.").foregroundStyle(.secondary)
             }
-            ForEach(footprint.relatedItems) { item in
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Toggle(item.category.rawValue, isOn: binding(for: item, in: row))
-                            .toggleStyle(.checkbox)
-                            .disabled(!item.canRemove || row.hasOtherInstallations || row.app.isProtected
-                                      || model.removingName != nil)
-                        Spacer()
-                        Text(item.needsContainerScan ? "Scan needed" : diskSize(item.usage)).monospacedDigit()
+            ForEach(groupedRelatedItems(footprint), id: \.title) { group in
+                VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(group.title).font(.subheadline.weight(.semibold))
+                        if let note = group.note {
+                            Text(note).font(.caption2).foregroundStyle(.secondary)
+                        }
                     }
-                    Text(displayedPath(item.url))
-                        .textSelection(.enabled)
-                    if item.needsContainerScan {
-                        Text("Choose Scan Including App Containers to measure this folder.")
-                            .foregroundStyle(.secondary)
-                    } else if let note = item.category.note {
-                        Text(note)
+                    ForEach(group.items) { item in
+                        relatedItem(item, in: row)
                     }
                 }
-                .font(.caption)
             }
         }
+    }
+
+    private func relatedItem(_ item: RelatedItem, in row: AppRow) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Toggle(item.url.lastPathComponent, isOn: binding(for: item, in: row))
+                    .toggleStyle(.checkbox)
+                    .disabled(!item.canRemove || row.hasOtherInstallations || row.app.isProtected
+                              || model.removingName != nil)
+                Spacer()
+                Text(item.needsContainerScan ? "Scan needed" : diskSize(item.usage)).monospacedDigit()
+            }
+            Text(displayedPath(item.url))
+                .textSelection(.enabled)
+            if item.needsContainerScan {
+                Text("Choose Scan Including App Containers to measure this folder.")
+                    .foregroundStyle(.secondary)
+            } else if let note = item.category.note {
+                Text(note)
+            }
+        }
+        .font(.caption)
+    }
+
+    /// Related files are easier to review when they are grouped by the risk
+    /// of removing them rather than listed in raw Library-path order.
+    private func groupedRelatedItems(_ footprint: AppFootprint) -> [RelatedFileGroup] {
+        let definitions: [(String, String?, [RelatedCategory])] = [
+            ("Safe to Remove",
+             "Caches, logs, and temporary state. Usually regenerates.",
+             [.cache, .logs, .savedState, .scripts]),
+            ("Settings & Support Files",
+             "May reset preferences or contain documents.",
+             [.preferences, .support]),
+            ("Website & Sign-in Data",
+             "May include sign-in data.",
+             [.webData]),
+            ("App Containers",
+             "May contain saved data or documents.",
+             [.container]),
+        ]
+        var assigned = Set<String>()
+        var groups: [RelatedFileGroup] = []
+        for definition in definitions {
+            let items = footprint.relatedItems.filter {
+                definition.2.contains($0.category) && assigned.insert($0.id).inserted
+            }
+            if !items.isEmpty {
+                groups.append(RelatedFileGroup(title: definition.0, note: definition.1, items: items))
+            }
+        }
+        let remaining = footprint.relatedItems.filter { !assigned.contains($0.id) }
+        if !remaining.isEmpty {
+            groups.append(RelatedFileGroup(title: "Other", note: nil, items: remaining))
+        }
+        return groups
     }
 
     private func controls(for row: AppRow) -> some View {
@@ -360,6 +444,12 @@ struct ContentView: View {
         let nameOrder = left.name.localizedStandardCompare(right.name)
         return nameOrder == .orderedSame ? left.id < right.id : nameOrder == .orderedAscending
     }
+}
+
+private struct RelatedFileGroup {
+    let title: String
+    let note: String?
+    let items: [RelatedItem]
 }
 
 private struct AppIcon: View {
