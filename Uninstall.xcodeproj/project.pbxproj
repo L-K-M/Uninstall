@@ -1,0 +1,421 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		02E0E92CAECAFF739F0D356A /* UninstallApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 379F339D3CDFEAAADAD71E38 /* UninstallApp.swift */; };
+		0A733029CB4355D77CC66627 /* AppRemoval.swift in Sources */ = {isa = PBXBuildFile; fileRef = 041343E1ACDE47F30DCC22C2 /* AppRemoval.swift */; };
+		0FE847E82BB1A4521BAFE139 /* AdministratorTrash.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC019E86CA33C2E8BD392D08 /* AdministratorTrash.swift */; };
+		4970B19541E828E7F2711B00 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4171FCEA0D1D777BE46F41D /* AppModel.swift */; };
+		5CCC4128F4505216EABA9FBB /* UninstallTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE5C90C6D15D190D560E9A57 /* UninstallTests.swift */; };
+		7B51B10174A0255297119BE6 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB3E0248A76CC1BDEAEF34CD /* ContentView.swift */; };
+		893123AD4D84273C7C546005 /* AppScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C72D0733EA128F70B54DD8D /* AppScanner.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		E516A9D8AC5ACF82B2B48518 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A21ED5715B0D6743233C6F32 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B64A8EE2756419D09590CD92;
+			remoteInfo = Uninstall;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		041343E1ACDE47F30DCC22C2 /* AppRemoval.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRemoval.swift; sourceTree = "<group>"; };
+		325484ED983CFBBE4F326A07 /* UninstallTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = UninstallTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		379F339D3CDFEAAADAD71E38 /* UninstallApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UninstallApp.swift; sourceTree = "<group>"; };
+		5DD0C6CE7696584E460D0F6F /* Uninstall.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Uninstall.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		8C72D0733EA128F70B54DD8D /* AppScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppScanner.swift; sourceTree = "<group>"; };
+		A4171FCEA0D1D777BE46F41D /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
+		DE5C90C6D15D190D560E9A57 /* UninstallTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UninstallTests.swift; sourceTree = "<group>"; };
+		FB3E0248A76CC1BDEAEF34CD /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		FC019E86CA33C2E8BD392D08 /* AdministratorTrash.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdministratorTrash.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		0565BDF54CBF852895E563CD /* UninstallTests */ = {
+			isa = PBXGroup;
+			children = (
+				DE5C90C6D15D190D560E9A57 /* UninstallTests.swift */,
+			);
+			path = UninstallTests;
+			sourceTree = "<group>";
+		};
+		06648642E5C61FE1E9826932 = {
+			isa = PBXGroup;
+			children = (
+				110A58265AA7EDB12EB9E98A /* Uninstall */,
+				0565BDF54CBF852895E563CD /* UninstallTests */,
+				100AA2FF32CD182777AAD2C8 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		100AA2FF32CD182777AAD2C8 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				5DD0C6CE7696584E460D0F6F /* Uninstall.app */,
+				325484ED983CFBBE4F326A07 /* UninstallTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		110A58265AA7EDB12EB9E98A /* Uninstall */ = {
+			isa = PBXGroup;
+			children = (
+				FC019E86CA33C2E8BD392D08 /* AdministratorTrash.swift */,
+				A4171FCEA0D1D777BE46F41D /* AppModel.swift */,
+				041343E1ACDE47F30DCC22C2 /* AppRemoval.swift */,
+				8C72D0733EA128F70B54DD8D /* AppScanner.swift */,
+				FB3E0248A76CC1BDEAEF34CD /* ContentView.swift */,
+				379F339D3CDFEAAADAD71E38 /* UninstallApp.swift */,
+			);
+			path = Uninstall;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A27F0BF62D74662FEA20C3E1 /* UninstallTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0F96E63BB610B5FE3C205764 /* Build configuration list for PBXNativeTarget "UninstallTests" */;
+			buildPhases = (
+				1E4FF586214ED5EE23133C18 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				E9269DEF2C6A1AB59982DA99 /* PBXTargetDependency */,
+			);
+			name = UninstallTests;
+			packageProductDependencies = (
+			);
+			productName = UninstallTests;
+			productReference = 325484ED983CFBBE4F326A07 /* UninstallTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		B64A8EE2756419D09590CD92 /* Uninstall */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7C41A5482F4A155CDABAF86F /* Build configuration list for PBXNativeTarget "Uninstall" */;
+			buildPhases = (
+				6B3848F2E1227FEA8D9C2F87 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Uninstall;
+			packageProductDependencies = (
+			);
+			productName = Uninstall;
+			productReference = 5DD0C6CE7696584E460D0F6F /* Uninstall.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A21ED5715B0D6743233C6F32 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					A27F0BF62D74662FEA20C3E1 = {
+						ProvisioningStyle = Automatic;
+					};
+					B64A8EE2756419D09590CD92 = {
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 48CD27F8B84D34E4AA2ED212 /* Build configuration list for PBXProject "Uninstall" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 06648642E5C61FE1E9826932;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 100AA2FF32CD182777AAD2C8 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				B64A8EE2756419D09590CD92 /* Uninstall */,
+				A27F0BF62D74662FEA20C3E1 /* UninstallTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		1E4FF586214ED5EE23133C18 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5CCC4128F4505216EABA9FBB /* UninstallTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		6B3848F2E1227FEA8D9C2F87 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0FE847E82BB1A4521BAFE139 /* AdministratorTrash.swift in Sources */,
+				4970B19541E828E7F2711B00 /* AppModel.swift in Sources */,
+				0A733029CB4355D77CC66627 /* AppRemoval.swift in Sources */,
+				893123AD4D84273C7C546005 /* AppScanner.swift in Sources */,
+				7B51B10174A0255297119BE6 /* ContentView.swift in Sources */,
+				02E0E92CAECAFF739F0D356A /* UninstallApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		E9269DEF2C6A1AB59982DA99 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B64A8EE2756419D09590CD92 /* Uninstall */;
+			targetProxy = E516A9D8AC5ACF82B2B48518 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		083C82A651D2A32FB347FA26 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = dev.uninstall.mac.tests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Uninstall.app/Contents/MacOS/Uninstall";
+			};
+			name = Release;
+		};
+		5D1F937253F0E4D5C4C2F9B6 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Uninstall;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.uninstall.mac;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		9AE86D6604219055F1E0DEF7 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Uninstall;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.uninstall.mac;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		C96F1CA373DB31291E1EE5B1 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		CFD4BFCFC85E2A223F23EF21 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = dev.uninstall.mac.tests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Uninstall.app/Contents/MacOS/Uninstall";
+			};
+			name = Debug;
+		};
+		DD3FAA5187824736A47441AF /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		0F96E63BB610B5FE3C205764 /* Build configuration list for PBXNativeTarget "UninstallTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CFD4BFCFC85E2A223F23EF21 /* Debug */,
+				083C82A651D2A32FB347FA26 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		48CD27F8B84D34E4AA2ED212 /* Build configuration list for PBXProject "Uninstall" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C96F1CA373DB31291E1EE5B1 /* Debug */,
+				DD3FAA5187824736A47441AF /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		7C41A5482F4A155CDABAF86F /* Build configuration list for PBXNativeTarget "Uninstall" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				9AE86D6604219055F1E0DEF7 /* Debug */,
+				5D1F937253F0E4D5C4C2F9B6 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = A21ED5715B0D6743233C6F32 /* Project object */;
+}

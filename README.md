@@ -1,0 +1,17 @@
+# Uninstall
+
+Uninstall is a native macOS app for reviewing installed apps and moving them to the Trash. Sort by total size or last opened, select an app, and choose **Remove App Only** or **Remove App and Selected Files**. The confirmation sheet lists the paths that will be moved. When moving the app bundle requires administrator access, macOS handles authentication.
+
+## Run locally
+
+Open `Uninstall.xcodeproj` in Xcode and run the **Uninstall** scheme on your Mac. Requires macOS 14 or later. Run the scheme’s tests with **Product → Test**.
+
+## What it measures
+
+Uninstall scans `/Applications`, `~/Applications`, and `/System/Applications`, including apps in subfolders. It uses Spotlight’s last-used date and locally stores launch dates for installed apps it sees running. Apps with neither date show **Unknown**.
+
+The size column estimates allocated disk space for the app bundle and related files identified by bundle ID in the current user’s Library. For protected apps, Uninstall measures the app bundle. Choose **Scan Including App Containers** in the scan menu to measure those folders for removable apps. macOS may prompt for access. Inaccessible files are marked as unavailable, and incomplete totals are shown as lower bounds.
+
+Preferences, application support, and containers are optional selections in the removal review. Caches and logs are preselected. Group containers are excluded, and cleanup is disabled for files shared by duplicate installations in the scanned locations. Some apps use custom locations that a bundle-ID scan cannot identify. Uninstall shows a vendor uninstaller when it finds a matching one next to the app.
+
+Files moved to Trash can be restored from there. Their disk space becomes available after the Trash is emptied.
