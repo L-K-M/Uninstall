@@ -106,10 +106,9 @@ struct AppScanner: Sendable {
         self.libraryDirectory = libraryDirectory.resolvingSymlinksInPath()
     }
 
-    func discover() -> [InstalledApp] {
+    func discover() async -> [InstalledApp] {
         let keys: Set<URLResourceKey> = [.isDirectoryKey, .isSymbolicLinkKey, .volumeIsReadOnlyKey]
-        var seen = Set<String>()
-        var apps: [InstalledApp] = []
+        var candidates: [(url: URL, readOnly: Bool)] = []
 
         for directory in applicationDirectories {
             guard let contents = FileManager.default.enumerator(
@@ -118,21 +117,36 @@ struct AppScanner: Sendable {
                 options: [.skipsHiddenFiles, .skipsPackageDescendants]
             ) else { continue }
 
-            for case let url as URL in contents {
-                if Task.isCancelled { return apps }
-                guard let values = try? url.resourceValues(forKeys: keys),
+            while let element = contents.nextObject() {
+                if Task.isCancelled { return [] }
+                guard let url = element as? URL,
+                      let values = try? url.resourceValues(forKeys: keys),
                       values.isDirectory == true, values.isSymbolicLink != true
                 else { continue }
                 if url.pathExtension.lowercased() == "app" {
                     contents.skipDescendants()
-                    guard let app = makeApp(at: url, readOnly: values.volumeIsReadOnly == true),
-                          seen.insert(app.id).inserted
-                    else { continue }
-                    apps.append(app)
+                    candidates.append((url, values.volumeIsReadOnly == true))
                 }
             }
         }
-        return apps
+
+        // Reading bundle metadata and Spotlight's last-used date is the expensive part,
+        // so resolve candidates concurrently while keeping enumeration order.
+        let built = await withTaskGroup(of: (Int, InstalledApp?).self) { group in
+            for (index, candidate) in candidates.enumerated() {
+                group.addTask { [self] in
+                    guard !Task.isCancelled else { return (index, nil) }
+                    return (index, self.makeApp(at: candidate.url, readOnly: candidate.readOnly))
+                }
+            }
+            var collected: [(Int, InstalledApp?)] = []
+            for await result in group { collected.append(result) }
+            return collected
+        }
+
+        var seen = Set<String>()
+        return built.sorted { $0.0 < $1.0 }.compactMap(\.1)
+            .filter { seen.insert($0.id).inserted }
     }
 
     func measure(_ app: InstalledApp, includingContainers: Bool = false) -> AppFootprint {
@@ -253,9 +267,29 @@ struct AppScanner: Sendable {
         if parent.lastPathComponent == stem || parent.lastPathComponent == name {
             names += ["Uninstall", "Uninstaller"]
         }
-        return names.lazy.map { parent.appendingPathComponent($0).appendingPathExtension("app") }
-            .first { $0.path != appURL.path && Self.isDirectPath($0)
-                && Self.fileIdentity(at: $0) != nil && Bundle(url: $0)?.infoDictionary != nil }
+        if let sibling = names.lazy.map({ parent.appendingPathComponent($0).appendingPathExtension("app") })
+            .first(where: { Self.isValidUninstaller($0, excluding: appURL) }) {
+            return sibling
+        }
+        // Some vendors ship the uninstaller inside the app bundle.
+        let contents = appURL.appendingPathComponent("Contents", isDirectory: true)
+        guard let entries = try? FileManager.default.contentsOfDirectory(atPath: contents.path) else { return nil }
+        return entries.sorted().lazy
+            .filter { $0.lowercased().contains("uninstall") && $0.hasSuffix(".app") }
+            .map { contents.appendingPathComponent($0) }
+            .first { Self.isValidUninstaller($0, excluding: appURL) }
+    }
+
+    // Deliberately avoids Bundle(url:) — discovery may resolve the same path
+    // concurrently as a candidate, and concurrent Bundle inits race in Launch Services.
+    private static func isValidUninstaller(_ url: URL, excluding appURL: URL) -> Bool {
+        guard url.path != appURL.path, isDirectPath(url), fileIdentity(at: url) != nil else { return false }
+        let plist = url.appendingPathComponent("Contents/Info.plist")
+        guard let data = FileManager.default.contents(atPath: plist.path),
+              let info = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+              info["CFBundleIdentifier"] is String
+        else { return false }
+        return true
     }
 }
 
