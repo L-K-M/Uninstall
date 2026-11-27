@@ -178,11 +178,14 @@ struct ContentView: View {
                 Text(status)
                 Button { model.showTrash() } label: {
                     Image(systemName: "trash")
+                        .frame(minWidth: 26, minHeight: 24)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.borderless)
                 .controlSize(.small)
-                .help("Reveal the Trash in Finder")
+                .help("Show in Trash")
                 .accessibilityLabel("Show in Trash")
+                .accessibilityHint("Opens the Trash in Finder.")
             } else {
                 Text("\(visibleRows.count) \(visibleRows.count == 1 ? "app" : "apps")")
             }
