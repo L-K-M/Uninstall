@@ -2,7 +2,9 @@ import Darwin
 import Foundation
 
 enum AdministratorTrash {
-    static func move(_ app: InstalledApp) throws {
+    /// Moves the app bundle to the Trash with administrator rights and returns
+    /// where it landed.
+    static func move(_ app: InstalledApp) throws -> URL {
         guard !app.isProtected, app.url.pathExtension.lowercased() == "app",
               AppScanner.isDirectPath(app.url), AppScanner.fileIdentity(at: app.url) == app.identity
         else {
@@ -42,8 +44,11 @@ enum AdministratorTrash {
 
         let result = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
         if process.terminationStatus == 0 {
-            if result == "moved" { return }
             if result == "cancelled" { throw CocoaError(.userCancelled) }
+            if let destination = result.split(separator: "\n", maxSplits: 1).first,
+               destination.hasPrefix("moved\t") {
+                return URL(fileURLWithPath: String(destination.dropFirst("moved\t".count)))
+            }
         }
         throw MoveError(result.isEmpty ? "macOS could not complete the authorized move to Trash." : result)
     }
@@ -116,13 +121,13 @@ enum AdministratorTrash {
 
         const originalName = source.slice(source.lastIndexOf("/") + 1);
         if ($.renamex_np(source, trash + "/" + originalName, Number(flags)) === 0) {
-            return "moved";
+            return "moved\t" + trash + "/" + originalName;
         }
         let failure = $.__error()[0];
         if (failure === Number(exists)) {
             verifyDirectory(source, device, appInode, appBirth, "The app");
             if ($.renamex_np(source, trash + "/" + alternate, Number(flags)) === 0) {
-                return "moved";
+                return "moved\t" + trash + "/" + alternate;
             }
             failure = $.__error()[0];
         }

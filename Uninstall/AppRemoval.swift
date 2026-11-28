@@ -4,19 +4,34 @@ struct RemovalPlan: Identifiable, Sendable {
     let id = UUID()
     let app: InstalledApp
     let relatedItems: [RelatedItem]
+    /// The app bundle's measured size, so the confirmation can show a total.
+    let bundleUsage: DiskUsage
+}
+
+/// One item that reached the Trash, and where it landed.
+struct MovedItem: Sendable {
+    let original: URL
+    let trash: URL
 }
 
 struct RemovalResult: Sendable {
     let moved: [URL]
     let problems: [String]
     var wasCancelled = false
+    /// Where each moved item ended up, so the receipt can point at the result
+    /// rather than at a path that no longer exists.
+    var trashed: [MovedItem] = []
 }
 
 enum AppRemoval {
     static func perform(
         _ plan: RemovalPlan,
-        moveWithAuthorization: (InstalledApp) throws -> Void = AdministratorTrash.move,
-        moveToTrash: (URL) throws -> Void = { try FileManager.default.trashItem(at: $0, resultingItemURL: nil) }
+        moveWithAuthorization: (InstalledApp) throws -> URL = AdministratorTrash.move,
+        moveToTrash: (URL) throws -> URL = { url in
+            var destination: NSURL?
+            try FileManager.default.trashItem(at: url, resultingItemURL: &destination)
+            return destination as URL? ?? url
+        }
     ) -> RemovalResult {
         let app = plan.app
         guard !app.isProtected else {
@@ -36,6 +51,7 @@ enum AppRemoval {
 
         var moved: [URL] = []
         var problems: [String] = []
+        var trashed: [MovedItem] = []
         for item in items {
             guard isUnchanged(item.url, identity: item.identity) else {
                 problems.append(changedMessage(item.url))
@@ -45,25 +61,27 @@ enum AppRemoval {
 
             do {
                 do {
-                    try moveToTrash(item.url)
+                    let destination = try moveToTrash(item.url)
+                    trashed.append(MovedItem(original: item.url, trash: destination))
                 } catch where item.url == app.url && isPermissionError(error) {
                     guard isUnchanged(item.url, identity: item.identity) else {
                         return RemovalResult(moved: [], problems: [changedMessage(item.url)])
                     }
-                    try moveWithAuthorization(app)
+                    let destination = try moveWithAuthorization(app)
+                    trashed.append(MovedItem(original: item.url, trash: destination))
                 }
                 moved.append(item.url)
             } catch {
                 if (error as NSError).domain == NSCocoaErrorDomain,
                    (error as NSError).code == CocoaError.userCancelled.rawValue {
-                    return RemovalResult(moved: moved, problems: problems, wasCancelled: true)
+                    return RemovalResult(moved: moved, problems: problems, wasCancelled: true, trashed: trashed)
                 }
                 problems.append("\(item.url.path)\n\(error.localizedDescription)")
                 if moved.isEmpty { break }
             }
         }
 
-        return RemovalResult(moved: moved, problems: problems)
+        return RemovalResult(moved: moved, problems: problems, trashed: trashed)
     }
 
     private static func isUnchanged(_ url: URL, identity: FileIdentity) -> Bool {
