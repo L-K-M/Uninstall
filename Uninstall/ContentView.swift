@@ -18,16 +18,35 @@ private func displayedPath(_ url: URL) -> String {
 struct ContentView: View {
     @State private var model = AppModel()
     @State private var search = ""
-    @State private var sortOrder = [KeyPathComparator(\AppRow.totalSortValue, order: .reverse)]
+    @State private var sortOrder = [
+        KeyPathComparator(\AppRow.totalSortValue, order: .reverse),
+        KeyPathComparator(\AppRow.name)
+    ]
+    // Explicit per-item decisions, kept across rescans. An item that has never been
+    // decided falls back to its category default, so related files discovered by a
+    // later scan are selected the same way as the ones found the first time.
     @State private var checkedByApp: [String: Set<String>] = [:]
+    @State private var uncheckedByApp: [String: Set<String>] = [:]
 
     private var visibleRows: [AppRow] {
         let term = search.trimmingCharacters(in: .whitespacesAndNewlines)
-        return model.rows.filter {
+        let matching = model.rows.filter {
             term.isEmpty || $0.name.localizedStandardContains(term)
                 || $0.app.bundleIdentifier?.localizedStandardContains(term) == true
+                || $0.app.url.path.localizedStandardContains(term)
         }
-        .sorted(by: compare)
+        // While measuring, hold a calm alphabetical order instead of letting rows jump
+        // around as their sizes arrive; the chosen sort is applied once the scan ends.
+        if model.isScanning {
+            return matching.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        }
+        return matching.sorted(by: compare)
+    }
+
+    /// The sort the table applies. Empty while scanning so the table keeps the
+    /// provisional alphabetical order above instead of re-sorting on every result.
+    private var tableSortOrder: Binding<[KeyPathComparator<AppRow>]> {
+        Binding(get: { model.isScanning ? [] : sortOrder }, set: { sortOrder = $0 })
     }
 
     var body: some View {
@@ -96,9 +115,8 @@ struct ContentView: View {
             model.refreshRunningApps()
         }
         .onChange(of: search) {
-            if !visibleRows.contains(where: { $0.id == model.selection }) {
-                model.selection = nil
-            }
+            // Keep the selection even when the filter hides it: the detail pane still
+            // describes a real app, and clearing it loses the user's place.
         }
         .sheet(item: $model.pendingPlan) { plan in
             RemovalReview(plan: plan, cancel: { model.pendingPlan = nil },
@@ -113,7 +131,7 @@ struct ContentView: View {
         @Bindable var model = model
         let rows = visibleRows
 
-        return Table(rows, selection: $model.selection, sortOrder: $sortOrder) {
+        return Table(rows, selection: $model.selection, sortOrder: tableSortOrder) {
             TableColumn("App", value: \.name) { row in
                 HStack(spacing: 8) {
                     AppIcon(url: row.app.url, size: 24)
@@ -320,27 +338,40 @@ struct ContentView: View {
         }
     }
 
+    /// The related items that should be moved with the app.
+    ///
+    /// An item counts as selected when the user checked it, or when the user has never
+    /// decided and its category is selected by default. Items the user unchecked stay
+    /// unchecked, and items a later scan discovers pick up their category default.
     private func checkedFiles(for row: AppRow) -> Set<String> {
-        checkedByApp[row.id] ?? Set((row.footprint?.relatedItems ?? [])
-            .filter { $0.canRemove && $0.category.selectedByDefault }.map(\.id))
+        let items = row.footprint?.relatedItems ?? []
+        let checked = checkedByApp[row.id] ?? []
+        let unchecked = uncheckedByApp[row.id] ?? []
+        return Set(items.filter { item in
+            checked.contains(item.id)
+                || (!unchecked.contains(item.id) && item.canRemove && item.category.selectedByDefault)
+        }.map(\.id))
     }
 
     private func binding(for item: RelatedItem, in row: AppRow) -> Binding<Bool> {
         Binding {
             !row.hasOtherInstallations && !row.app.isProtected && checkedFiles(for: row).contains(item.id)
         } set: { checked in
-            var items = checkedFiles(for: row)
+            var checkedSet = checkedByApp[row.id] ?? []
+            var uncheckedSet = uncheckedByApp[row.id] ?? []
             if checked {
-                items.insert(item.id)
+                checkedSet.insert(item.id)
+                uncheckedSet.remove(item.id)
             } else {
-                items.remove(item.id)
+                checkedSet.remove(item.id)
+                uncheckedSet.insert(item.id)
             }
-            checkedByApp[row.id] = items
+            checkedByApp[row.id] = checkedSet
+            uncheckedByApp[row.id] = uncheckedSet
         }
     }
 
     private func scan(includingContainers: Bool) {
-        checkedByApp = [:]
         model.refresh(includingContainers: includingContainers)
     }
 
@@ -367,7 +398,7 @@ private struct AppIcon: View {
     let size: CGFloat
 
     var body: some View {
-        Image(nsImage: NSWorkspace.shared.icon(forFile: url.path))
+        Image(nsImage: IconCache.icon(for: url))
             .resizable()
             .aspectRatio(contentMode: .fit)
             .frame(width: size, height: size)
