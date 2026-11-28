@@ -20,13 +20,11 @@ struct ContentView: View {
     @State private var search = ""
     @State private var sortOrder = [KeyPathComparator(\AppRow.totalSortValue, order: .reverse)]
     @State private var checkedByApp: [String: Set<String>] = [:]
+    @FocusState private var searchFocused: Bool
 
     private var visibleRows: [AppRow] {
         let term = search.trimmingCharacters(in: .whitespacesAndNewlines)
-        return model.rows.filter {
-            term.isEmpty || $0.name.localizedStandardContains(term)
-                || $0.app.bundleIdentifier?.localizedStandardContains(term) == true
-        }
+        return model.rows.filter { appMatchesSearchTerm($0.app, search) }
         .sorted(by: compare)
     }
 
@@ -76,12 +74,6 @@ struct ContentView: View {
                 }
             }
 
-            ToolbarItem(placement: .automatic) {
-                TextField("Search apps", text: $search)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 180)
-                    .accessibilityLabel("Search apps")
-            }
         }
         .task { model.start() }
         .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didLaunchApplicationNotification)
@@ -95,9 +87,24 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             model.refreshRunningApps()
         }
-        .onChange(of: search) {
-            if !visibleRows.contains(where: { $0.id == model.selection }) {
-                model.selection = nil
+        // A filter that hides the selected app must not throw the selection away:
+        // the detail pane still describes a real app, and clearing it loses the
+        // user's place in the list.
+        .onReceive(NotificationCenter.default.publisher(for: .uninstallFocusSearch)) { _ in
+            searchFocused = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .uninstallScanAgain)) { _ in
+            scan(includingContainers: false)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .uninstallScanIncludingContainers)) { _ in
+            scan(includingContainers: true)
+        }
+        .onExitCommand {
+            // Escape clears an active search before it does anything else.
+            if !search.isEmpty {
+                search = ""
+            } else {
+                searchFocused = false
             }
         }
         .sheet(item: $model.pendingPlan) { plan in
@@ -113,7 +120,9 @@ struct ContentView: View {
         @Bindable var model = model
         let rows = visibleRows
 
-        return Table(rows, selection: $model.selection, sortOrder: $sortOrder) {
+        return VStack(spacing: 0) {
+            searchField
+            Table(rows, selection: $model.selection, sortOrder: $sortOrder) {
             TableColumn("App", value: \.name) { row in
                 HStack(spacing: 8) {
                     AppIcon(url: row.app.url, size: 24)
@@ -138,25 +147,57 @@ struct ContentView: View {
 
             TableColumn("Last Opened", value: \.lastOpenedSortValue) { row in
                 if let date = row.lastOpened {
-                    Text(date, format: .dateTime.year().month(.abbreviated).day())
+                    // Relative first, absolute on hover: "3 months ago" tells a user
+                    // deciding what to remove far more than "22 Nov 2026".
+                    Text(lastOpenedLabel(date))
                         .foregroundStyle(.secondary)
+                        .help(date.formatted(date: .abbreviated, time: .omitted))
                 } else {
                     Text("Unknown").foregroundStyle(.tertiary)
                 }
             }
             .width(min: 100, ideal: 112, max: 140)
-        }
-        .overlay {
-            if rows.isEmpty {
-                if model.isScanning && model.rows.isEmpty {
-                    ProgressView("Finding installed apps…")
-                } else if !search.isEmpty {
-                    ContentUnavailableView.search(text: search)
-                } else {
-                    ContentUnavailableView("No Apps Found", systemImage: "macwindow")
+            }
+            .overlay {
+                if rows.isEmpty {
+                    if model.isScanning && model.rows.isEmpty {
+                        ProgressView("Finding installed apps…")
+                    } else if !search.isEmpty {
+                        ContentUnavailableView.search(text: search)
+                    } else {
+                        ContentUnavailableView("No Apps Found", systemImage: "macwindow")
+                    }
                 }
             }
         }
+    }
+
+    /// The search field lives above the list rather than in the toolbar: a toolbar
+    /// text field cannot become first responder on macOS, so ⌘F would have nothing
+    /// to focus. Above the list it is also next to the rows it filters.
+    private var searchField: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+            TextField("Search apps", text: $search)
+                .focused($searchFocused)
+                .textFieldStyle(.roundedBorder)
+                .accessibilityLabel("Search apps")
+                .accessibilityValue(search.isEmpty ? "Empty" : search)
+            if !search.isEmpty {
+                Button {
+                    search = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Clear search")
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
     }
 
     private var statusBar: some View {
@@ -177,7 +218,11 @@ struct ContentView: View {
                     .accessibilityHidden(true)
                 Text(status)
             } else {
-                Text("\(visibleRows.count) \(visibleRows.count == 1 ? "app" : "apps")")
+                if search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text("\(visibleRows.count) \(visibleRows.count == 1 ? "app" : "apps")")
+                } else {
+                    Text("\(visibleRows.count) of \(model.rows.count) match")
+                }
             }
             Spacer(minLength: 0)
         }
@@ -340,6 +385,11 @@ struct ContentView: View {
     }
 
     private func scan(includingContainers: Bool) {
+        // Mirror the model's own guard. The menu-bar commands and their key
+        // equivalents have no disabled state, so ⌘R can arrive while the review
+        // sheet is open or a removal is in flight; refreshing would refuse it and
+        // the checkbox curation below would be lost for nothing.
+        guard model.removingName == nil, model.pendingPlan == nil else { return }
         checkedByApp = [:]
         model.refresh(includingContainers: includingContainers)
     }

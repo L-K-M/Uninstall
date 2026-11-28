@@ -217,6 +217,40 @@ final class UninstallTests: XCTestCase {
         XCTAssertFalse(result.wasCancelled)
     }
 
+    func testLastOpenedLabelBuckets() throws {
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        func label(_ seconds: TimeInterval) -> String {
+            lastOpenedLabel(now.addingTimeInterval(-seconds), now: now)
+        }
+        func absolute(_ seconds: TimeInterval) -> String {
+            now.addingTimeInterval(-seconds).formatted(date: .abbreviated, time: .omitted)
+        }
+        XCTAssertEqual(label(-60), absolute(-60), "a future date falls back to absolute")
+        XCTAssertEqual(label(0), "Just now")
+        XCTAssertEqual(label(59), "Just now")
+        XCTAssertEqual(label(60), "1 min ago")
+        XCTAssertEqual(label(3_599), "59 mins ago")
+        XCTAssertEqual(label(3_600), "1 hr ago")
+        XCTAssertEqual(label(86_399), "23 hrs ago")
+        XCTAssertEqual(label(86_400), "1 day ago")
+        XCTAssertEqual(label(604_799), "6 days ago")
+        XCTAssertEqual(label(604_800), absolute(604_800), "past a week it falls back to absolute")
+    }
+
+    func testSearchMatchesNameBundleIDAndPath() throws {
+        try makeApp(relativePath: "Utilities/Editor.app")
+        let app = try XCTUnwrap(scanner.discover().first)
+
+        XCTAssertTrue(appMatchesSearchTerm(app, ""))
+        XCTAssertTrue(appMatchesSearchTerm(app, "   "))
+        XCTAssertTrue(appMatchesSearchTerm(app, "editor"), "case-insensitive name")
+        let vendorPrefix = identifier.split(separator: ".").dropLast().joined(separator: ".")
+        XCTAssertTrue(appMatchesSearchTerm(app, vendorPrefix), "bundle identifier prefix")
+        XCTAssertTrue(appMatchesSearchTerm(app, "utili"), "a path component")
+        XCTAssertTrue(appMatchesSearchTerm(app, "Utilities/Editor.app"))
+        XCTAssertFalse(appMatchesSearchTerm(app, "photoshop"))
+    }
+
     @discardableResult
     private func makeApp(relativePath: String) throws -> URL {
         let app = apps.appendingPathComponent(relativePath, isDirectory: true).standardizedFileURL
