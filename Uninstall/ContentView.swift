@@ -6,7 +6,7 @@ private func diskSize(_ bytes: Int64) -> String {
 }
 
 private func diskSize(_ usage: DiskUsage) -> String {
-    if usage.isComplete { return diskSize(usage.bytes) }
+    if usage.isComplete { return usage.bytes > 0 ? diskSize(usage.bytes) : "None" }
     return usage.bytes > 0 ? "≥ " + diskSize(usage.bytes) : "Unavailable"
 }
 
@@ -20,6 +20,7 @@ struct ContentView: View {
     @State private var search = ""
     @State private var sortOrder = [KeyPathComparator(\AppRow.totalSortValue, order: .reverse)]
     @State private var checkedByApp: [String: Set<String>] = [:]
+    @State private var uncheckedByApp: [String: Set<String>] = [:]
 
     private var visibleRows: [AppRow] {
         let term = search.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -192,19 +193,10 @@ struct ContentView: View {
     private func details(for row: AppRow) -> some View {
         VStack(spacing: 0) {
             ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    HStack(alignment: .center, spacing: 12) {
-                        AppIcon(url: row.app.url, size: 48)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(row.name).font(.title2.weight(.semibold))
-                            Text(displayedPath(row.app.url))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .textSelection(.enabled)
-                        }
-                    }
+                VStack(alignment: .leading, spacing: 20) {
+                    identityHeader(for: row)
                     if let footprint = row.footprint {
-                        storage(for: footprint)
+                        storageCard(for: footprint)
                         relatedFiles(for: row, footprint: footprint)
                     } else {
                         ProgressView("Measuring storage…").controlSize(.small)
@@ -220,58 +212,203 @@ struct ContentView: View {
         }
     }
 
-    private func storage(for footprint: AppFootprint) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack {
+    // MARK: Identity header
+
+    private func identityHeader(for row: AppRow) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 12) {
+                AppIcon(url: row.app.url, size: 56)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(row.name)
+                        .font(.title2.weight(.semibold))
+                        .textSelection(.enabled)
+                    Text(displayedPath(row.app.url))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                        .lineLimit(2)
+                }
+                Spacer(minLength: 0)
+            }
+
+            let chips = statusChips(for: row)
+            if !chips.isEmpty {
+                HStack(spacing: 6) {
+                    ForEach(chips) { chip in
+                        StatusChip(chip: chip)
+                    }
+                }
+            }
+        }
+    }
+
+    private func statusChips(for row: AppRow) -> [AppStatusChip] {
+        var chips: [AppStatusChip] = []
+        if row.app.isProtected {
+            chips.append(AppStatusChip(title: "Protected", systemImage: "lock",
+                                       explanation: "Uninstall shows this app’s size but will not move it."))
+        }
+        if model.isRunning(row.app) {
+            chips.append(AppStatusChip(title: "Running", systemImage: "play",
+                                       explanation: "Quit this app before removing it."))
+        }
+        if row.hasOtherInstallations {
+            chips.append(AppStatusChip(title: "Duplicate install", systemImage: "rectangle.2.onrectangle",
+                                       explanation: "Another installed copy uses the same bundle ID, so related files are shared and cannot be removed."))
+        }
+        if row.app.vendorUninstaller != nil {
+            chips.append(AppStatusChip(title: "Vendor uninstaller", systemImage: "wrench.and.screwdriver",
+                                       explanation: "The vendor ships its own uninstaller next to the app. Click to open it.",
+                                       action: { model.openVendorUninstaller(for: row) }))
+        }
+        return chips
+    }
+
+    // MARK: Storage
+
+    private func storageCard(for footprint: AppFootprint) -> some View {
+        let relatedUsage = DiskUsage(bytes: footprint.relatedBytes,
+                                     isComplete: footprint.relatedInventoryComplete
+                                         && footprint.relatedItems.allSatisfy(\.usage.isComplete))
+        let total = footprint.totalBytes
+        let appShare = total > 0 ? CGFloat(footprint.bundle.bytes) / CGFloat(total) : 0
+        let relatedShare = total > 0 ? CGFloat(footprint.relatedBytes) / CGFloat(total) : 0
+
+        return VStack(alignment: .leading, spacing: 9) {
+            HStack(alignment: .firstTextBaseline) {
                 Text("Storage").font(.headline)
                 Spacer()
-                Text(diskSize(DiskUsage(bytes: footprint.totalBytes, isComplete: footprint.isComplete)))
+                Text(diskSize(DiskUsage(bytes: total, isComplete: footprint.isComplete)))
                     .font(.headline).monospacedDigit()
             }
-            storageLine("App", value: diskSize(footprint.bundle))
-            let relatedUsage = DiskUsage(bytes: footprint.relatedBytes,
-                                         isComplete: footprint.relatedInventoryComplete
-                                             && footprint.relatedItems.allSatisfy(\.usage.isComplete))
-            storageLine("Related Files", value: diskSize(relatedUsage))
+
+            if total > 0 {
+                GeometryReader { geometry in
+                    ZStack(alignment: .leading) {
+                        // The track is only visible when something is unmeasured: it is
+                        // the part of the picture we cannot size, not a zero.
+                        if !footprint.isComplete {
+                            RoundedRectangle(cornerRadius: 2).fill(Color.secondary.opacity(0.18))
+                        }
+                        HStack(spacing: 2) {
+                            if appShare > 0 {
+                                segment(width: geometry.size.width * appShare, color: Color.accentColor)
+                            }
+                            if relatedShare > 0 {
+                                segment(width: geometry.size.width * relatedShare,
+                                        color: Color.accentColor.opacity(0.4))
+                            }
+                        }
+                    }
+                }
+                .frame(height: 8)
+                .clipShape(RoundedRectangle(cornerRadius: 4))
+                .accessibilityElement()
+                .accessibilityLabel("Storage breakdown")
+                .accessibilityValue(storageBarDescription(app: diskSize(footprint.bundle),
+                                                          related: diskSize(relatedUsage),
+                                                          unmeasured: !footprint.isComplete))
+
+                HStack(spacing: 14) {
+                    legend(Color.accentColor, "App", diskSize(footprint.bundle))
+                    legend(Color.accentColor.opacity(0.4), "Related Files", diskSize(relatedUsage))
+                    if !footprint.isComplete {
+                        legend(Color.secondary.opacity(0.18), "Unmeasured", "")
+                    }
+                }
+            }
+
+            Text("Allocated space for the app bundle and the related files Uninstall can identify. "
+                + "Files move to the Trash — empty it to reclaim the space.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
             if !footprint.isComplete {
-                Label("Some files couldn’t be measured.", systemImage: "info.circle")
+                Label("Some files couldn’t be measured, so the total is a lower bound.",
+                      systemImage: "info.circle")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
     }
 
-    private func storageLine(_ label: String, value: String) -> some View {
-        HStack {
-            Text(label)
-            Spacer()
-            Text(value).monospacedDigit()
-        }
-        .foregroundStyle(.secondary)
+    private func storageBarDescription(app: String, related: String, unmeasured: Bool) -> String {
+        "App \(app), related files \(related)"
+            + (unmeasured ? ", plus files that could not be measured" : "")
     }
 
+    private func segment(width: CGFloat, color: Color) -> some View {
+        RoundedRectangle(cornerRadius: 2)
+            .fill(color)
+            .frame(width: width)
+    }
+
+    private func legend(_ color: Color, _ label: String, _ value: String) -> some View {
+        HStack(spacing: 5) {
+            RoundedRectangle(cornerRadius: 2).fill(color).frame(width: 8, height: 8)
+            Text(label).foregroundStyle(.secondary)
+            if !value.isEmpty {
+                Text(value).monospacedDigit()
+            }
+        }
+        .font(.caption)
+    }
+
+    // MARK: Related files
+
     private func relatedFiles(for row: AppRow, footprint: AppFootprint) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let items = footprint.relatedItems
+        let selectable = items.filter(\.canRemove)
+        let selectionDisabled = row.hasOtherInstallations || row.app.isProtected || model.removingName != nil
+
+        return VStack(alignment: .leading, spacing: 10) {
             Divider()
-            Text("Related Files").font(.headline)
+
+            HStack(alignment: .firstTextBaseline) {
+                Text("Related Files").font(.headline)
+                Spacer()
+                if !selectable.isEmpty && !selectionDisabled {
+                    Button("All") { selectAll(items, in: row) }
+                        .buttonStyle(.borderless)
+                    Button("None") { selectNone(items, in: row) }
+                        .buttonStyle(.borderless)
+                }
+            }
+            .font(.caption)
+
             if row.hasOtherInstallations {
-                Text("Another installed copy uses the same bundle ID. Its related files are shared.")
+                Text("Another installed copy uses the same bundle ID, so its related files are shared. "
+                    + "They are never selected.")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else if row.app.isProtected {
+                Text("Storage covers the app bundle only.")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else if items.isEmpty {
+                Text("No related files found.")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else {
+                Text("Caches and logs are selected by default; preferences, saved data and "
+                    + "containers are not.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            if row.app.isProtected {
-                Text("Storage covers the app bundle.").foregroundStyle(.secondary)
-            } else if footprint.relatedItems.isEmpty {
-                Text("No related files found.").foregroundStyle(.secondary)
-            }
-            ForEach(footprint.relatedItems) { item in
+
+            ForEach(items) { item in
                 VStack(alignment: .leading, spacing: 4) {
-                    HStack {
+                    HStack(spacing: 8) {
                         Toggle(item.category.rawValue, isOn: binding(for: item, in: row))
                             .toggleStyle(.checkbox)
-                            .disabled(!item.canRemove || row.hasOtherInstallations || row.app.isProtected
-                                      || model.removingName != nil)
-                        Spacer()
-                        Text(item.needsContainerScan ? "Scan needed" : diskSize(item.usage)).monospacedDigit()
+                            .disabled(!item.canRemove || selectionDisabled)
+                        Spacer(minLength: 4)
+                        Text(item.needsContainerScan ? "Scan needed" : diskSize(item.usage))
+                            .monospacedDigit()
+                        Button {
+                            model.reveal(item.url)
+                        } label: {
+                            Image(systemName: "arrow.up.forward.app")
+                        }
+                        .buttonStyle(.borderless)
+                        .help("Show in Finder")
+                        .disabled(model.removingName != nil)
                     }
                     Text(displayedPath(item.url))
                         .textSelection(.enabled)
@@ -280,6 +417,7 @@ struct ContentView: View {
                             .foregroundStyle(.secondary)
                     } else if let note = item.category.note {
                         Text(note)
+                            .foregroundStyle(.secondary)
                     }
                 }
                 .font(.caption)
@@ -287,55 +425,105 @@ struct ContentView: View {
         }
     }
 
-    private func controls(for row: AppRow) -> some View {
-        let disabled = row.app.isProtected || model.isRunning(row.app) || model.removingName != nil
-        let selected = checkedFiles(for: row)
+    private func selectAll(_ items: [RelatedItem], in row: AppRow) {
+        let updated = selection(for: row).selectingAll()
+        checkedByApp[row.id] = updated.checked
+        uncheckedByApp[row.id] = updated.unchecked
+    }
 
-        return VStack(alignment: .leading, spacing: 8) {
-            if row.app.isProtected {
-                Label("This app is protected.", systemImage: "lock")
+    private func selectNone(_ items: [RelatedItem], in row: AppRow) {
+        let updated = selection(for: row).selectingNone()
+        checkedByApp[row.id] = updated.checked
+        uncheckedByApp[row.id] = updated.unchecked
+    }
+
+    // MARK: Footer
+
+    private func controls(for row: AppRow) -> some View {
+        let blocked = row.app.isProtected || model.isRunning(row.app) || model.removingName != nil
+        let sharedData = row.hasOtherInstallations
+        let selected = checkedFiles(for: row)
+        let removeFiles = !selected.isEmpty && !sharedData
+        let primaryTitle = removeFiles ? "Review & Remove…" : "Remove App Only…"
+
+        return VStack(alignment: .leading, spacing: 10) {
+            if let chip = statusChips(for: row).first {
+                Label(chip.title, systemImage: chip.systemImage)
                     .font(.caption).foregroundStyle(.secondary)
-            } else if model.isRunning(row.app) {
-                Label("Quit this app before removing it.", systemImage: "info.circle")
+                Text(chip.explanation)
+                    .font(.caption).foregroundStyle(.secondary)
+            } else if selected.isEmpty && !sharedData {
+                Text("No related files selected — only the app bundle will move.")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else if sharedData {
+                Text("Only the app bundle can move while another copy shares its data.")
                     .font(.caption).foregroundStyle(.secondary)
             }
 
-            HStack {
-                if row.app.vendorUninstaller != nil {
-                    Button("Open Vendor Uninstaller") { model.openVendorUninstaller(for: row) }
-                        .disabled(model.removingName != nil)
+            HStack(alignment: .center, spacing: 10) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Selected to remove")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Text(selectedBytesLabel(for: row))
+                        .font(.callout.weight(.medium)).monospacedDigit()
                 }
-                Spacer(minLength: 0)
-                Menu {
-                    Button("Remove App Only") { model.prepareRemoval(for: row, relatedIDs: []) }
-                        .disabled(disabled)
-                    Button("Remove App and Selected Files") { model.prepareRemoval(for: row, relatedIDs: selected) }
-                        .disabled(disabled || selected.isEmpty || row.hasOtherInstallations)
+                Spacer(minLength: 8)
+
+                Button {
+                    model.reveal(row.app.url)
                 } label: {
-                    Label("Remove…", systemImage: "trash")
+                    Image(systemName: "arrow.up.forward.app")
+                        .font(.body)
                 }
-                .fixedSize()
-                .disabled(disabled)
+                .buttonStyle(.borderless)
+                .help("Show in Finder")
+                .disabled(model.removingName != nil)
+
+                if removeFiles {
+                    Button("App Only") { model.prepareRemoval(for: row, relatedIDs: []) }
+                        .buttonStyle(.borderless)
+                        .disabled(blocked)
+                }
+
+                Button(primaryTitle) {
+                    model.prepareRemoval(for: row, relatedIDs: selected)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(blocked)
             }
         }
     }
 
+    private func selectedBytesLabel(for row: AppRow) -> String {
+        let current = selection(for: row)
+        let bundle = row.footprint?.bundle.bytes ?? 0
+        let complete = (row.footprint?.bundle.isComplete ?? false) && current.isComplete
+        return diskSize(DiskUsage(bytes: bundle + current.selectedBytes, isComplete: complete))
+    }
+
+    /// The selection rules for one row, including whether the row allows related
+    /// removal at all. A duplicate install or a protected app never does, so its
+    /// footer total and its primary action agree with its toggles.
+    private func selection(for row: AppRow) -> RelatedSelection {
+        RelatedSelection(allowsRelatedRemoval: !row.hasOtherInstallations && !row.app.isProtected,
+                         items: row.footprint?.relatedItems ?? [],
+                         checked: checkedByApp[row.id] ?? [],
+                         unchecked: uncheckedByApp[row.id] ?? [])
+    }
+
     private func checkedFiles(for row: AppRow) -> Set<String> {
-        checkedByApp[row.id] ?? Set((row.footprint?.relatedItems ?? [])
-            .filter { $0.canRemove && $0.category.selectedByDefault }.map(\.id))
+        selection(for: row).selectedIDs
     }
 
     private func binding(for item: RelatedItem, in row: AppRow) -> Binding<Bool> {
         Binding {
-            !row.hasOtherInstallations && !row.app.isProtected && checkedFiles(for: row).contains(item.id)
+            selection(for: row).selectedIDs.contains(item.id)
         } set: { checked in
-            var items = checkedFiles(for: row)
-            if checked {
-                items.insert(item.id)
-            } else {
-                items.remove(item.id)
-            }
-            checkedByApp[row.id] = items
+            let updated = checked
+                ? selection(for: row).selecting(item)
+                : selection(for: row).deselecting(item)
+            checkedByApp[row.id] = updated.checked
+            uncheckedByApp[row.id] = updated.unchecked
         }
     }
 
@@ -359,6 +547,38 @@ struct ContentView: View {
         }
         let nameOrder = left.name.localizedStandardCompare(right.name)
         return nameOrder == .orderedSame ? left.id < right.id : nameOrder == .orderedAscending
+    }
+}
+
+private struct AppStatusChip: Identifiable {
+    let title: String
+    let systemImage: String
+    let explanation: String
+    var action: (() -> Void)?
+    var id: String { title }
+}
+
+private struct StatusChip: View {
+    let chip: AppStatusChip
+
+    var body: some View {
+        if let action = chip.action {
+            Button(action: action) {
+                label
+            }
+            .buttonStyle(.plain)
+        } else {
+            label
+        }
+    }
+
+    private var label: some View {
+        Label(chip.title, systemImage: chip.systemImage)
+            .font(.caption2.weight(.medium))
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(.quaternary.opacity(0.6), in: Capsule())
+            .help(chip.explanation)
     }
 }
 

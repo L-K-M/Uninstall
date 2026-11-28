@@ -217,6 +217,81 @@ final class UninstallTests: XCTestCase {
         XCTAssertFalse(result.wasCancelled)
     }
 
+    func testRelatedSelectionDefaultsToCachesAndLogsOnly() throws {
+        try makeApp(relativePath: "Editor.app")
+        let items = try makeRelatedItems()
+        XCTAssertFalse(items.isEmpty)
+
+        let selection = RelatedSelection(allowsRelatedRemoval: true, items: items)
+        XCTAssertEqual(selection.selectedIDs, Set(items.filter { $0.category.selectedByDefault }.map(\.id)))
+        XCTAssertTrue(selection.isComplete)
+        XCTAssertEqual(selection.selectedBytes,
+                       items.filter { selection.selectedIDs.contains($0.id) }
+                           .reduce(0) { $0 + $1.usage.bytes })
+    }
+
+    func testRelatedSelectionHonoursExplicitChecksAndUnchecks() throws {
+        try makeApp(relativePath: "Editor.app")
+        let items = try makeRelatedItems()
+        let cache = try XCTUnwrap(items.first { $0.category == .cache })
+        let logs = try XCTUnwrap(items.first { $0.category == .logs })
+        let preferences = try XCTUnwrap(items.first { $0.category == .preferences })
+
+        // Unchecking the cache keeps the log, which the user never decided about.
+        let checked = RelatedSelection(allowsRelatedRemoval: true, items: items)
+            .deselecting(cache).selecting(preferences)
+        XCTAssertEqual(checked.selectedIDs, Set([logs.id, preferences.id]))
+        XCTAssertEqual(checked.selectedBytes, logs.usage.bytes + preferences.usage.bytes)
+
+        let none = checked.selectingNone()
+        XCTAssertTrue(none.selectedIDs.isEmpty)
+        XCTAssertEqual(none.selectedBytes, 0)
+
+        let all = none.selectingAll()
+        XCTAssertEqual(all.selectedIDs, Set(items.filter(\.canRemove).map(\.id)))
+    }
+
+    func testRelatedSelectionKeepsDecisionsForItemsDiscoveredLater() throws {
+        try makeApp(relativePath: "Editor.app")
+        let first = try makeRelatedItems()
+        let cache = try XCTUnwrap(first.first { $0.category == .cache })
+        let preferences = try XCTUnwrap(first.first { $0.category == .preferences })
+
+        // The user unchecks the cache and checks the preferences.
+        let decided = RelatedSelection(allowsRelatedRemoval: true, items: first)
+            .deselecting(cache).selecting(preferences)
+
+        // A rescan finds a saved-state folder that was not there before.
+        let savedState = library.appendingPathComponent("Saved Application State/\(identifier).savedState")
+        try makeFile(at: savedState.appendingPathComponent("data"))
+        let rescanned = try makeRelatedItems()
+        let savedItem = try XCTUnwrap(rescanned.first { $0.url.path == savedState.path })
+
+        let carried = RelatedSelection(allowsRelatedRemoval: true, items: rescanned,
+                                       checked: decided.checked, unchecked: decided.unchecked)
+        XCTAssertFalse(carried.selectedIDs.contains(cache.id), "an unchecked item stays unchecked")
+        XCTAssertTrue(carried.selectedIDs.contains(preferences.id), "a checked item stays checked")
+        XCTAssertFalse(carried.selectedIDs.contains(savedItem.id),
+                       "a newly discovered non-default item is not selected")
+    }
+
+    func testRelatedSelectionIsEmptyForSharedAndUnverifiableRows() throws {
+        try makeApp(relativePath: "Editor.app")
+        let items = try makeRelatedItems()
+        XCTAssertFalse(items.isEmpty)
+
+        XCTAssertTrue(RelatedSelection(allowsRelatedRemoval: false, items: items).selectedIDs.isEmpty)
+
+        // An item that cannot be verified never counts, even if explicitly checked.
+        let cache = try XCTUnwrap(items.first { $0.category == .cache })
+        let unverifiable = RelatedItem(url: cache.url, category: .cache, identity: nil,
+                                       usage: .unavailable)
+        let forced = RelatedSelection(allowsRelatedRemoval: true, items: [unverifiable],
+                                      checked: [unverifiable.id])
+        XCTAssertTrue(forced.selectedIDs.isEmpty)
+        XCTAssertEqual(forced.selectedBytes, 0)
+    }
+
     @discardableResult
     private func makeApp(relativePath: String) throws -> URL {
         let app = apps.appendingPathComponent(relativePath, isDirectory: true).standardizedFileURL
@@ -230,6 +305,16 @@ final class UninstallTests: XCTestCase {
     private func makeFile(at url: URL, data: Data = Data(repeating: 0xa3, count: 8_192)) throws {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try data.write(to: url)
+    }
+
+    /// Creates the related files the other tests use and returns the measured items.
+    private func makeRelatedItems() throws -> [RelatedItem] {
+        try makeFile(at: library.appendingPathComponent("Caches/\(identifier)/data"))
+        try makeFile(at: library.appendingPathComponent("Logs/\(identifier)/data"))
+        try makeFile(at: library.appendingPathComponent("Preferences/\(identifier).plist"))
+        try makeFile(at: library.appendingPathComponent("Application Support/\(identifier)/data"))
+        let app = try XCTUnwrap(scanner.discover().first)
+        return scanner.measure(app).relatedItems
     }
 
     private func allocatedBytes(_ url: URL) throws -> Int64 {
